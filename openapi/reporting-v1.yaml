@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Reporting & Visualization API
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200": { description: OK }
+  /api/v1/builder/query:
+    post:
+      summary: Execute dataset query
+      tags: [builder]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuilderQuery"
+      responses:
+        "200":
+          description: Rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+        "400": { description: Invalid request }
+  /api/v1/visualizations:
+    post:
+      summary: Save visualization schema (with layout)
+      tags: [visualizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveViz"
+      responses:
+        "200": { description: Saved }
+  /api/v1/visualizations/{viz_id}:
+    get:
+      summary: Get visualization by id
+      tags: [visualizations]
+      parameters:
+        - in: path
+          name: viz_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Visualization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  schema_json: { type: object }
+        "404": { description: Not found }
+components:
+  schemas:
+    Filter:
+      type: object
+      properties:
+        field: { type: string }
+        op: { type: string, enum: ["=","!=",">","<",">=","<=","between","in","like"] }
+        value: {}
+      required: [field, op, value]
+    Sort:
+      type: object
+      properties:
+        field: { type: string }
+        dir: { type: string, enum: [asc, desc], default: asc }
+      required: [field]
+    BuilderQuery:
+      type: object
+      properties:
+        datasetKey: { type: string }
+        select: { type: array, items: { type: string }, default: [] }
+        filters: { type: array, items: { $ref: "#/components/schemas/Filter" }, default: [] }
+        groupBy: { type: array, items: { type: string }, default: [] }
+        sort: { type: array, items: { $ref: "#/components/schemas/Sort" }, default: [] }
+        limit: { type: integer, default: 5000 }
+        calcFields: { type: array, items: { type: object }, default: [] }
+      required: [datasetKey]
+    SaveViz:
+      type: object
+      properties:
+        name: { type: string }
+        schema:
+          type: object
+          properties:
+            layout:
+              type: array
+              items:
+                type: object
+                properties:
+                  x: { type: integer }
+                  y: { type: integer }
+                  w: { type: integer }
+                  h: { type: integer }
+                  i: { type: string }
+                required: [x,y,w,h,i]
