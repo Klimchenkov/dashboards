@@ -1,19 +1,18 @@
+version: "3.9"
 
 services:
   db_dashboards:
-    build: 
-      context: ./db
-      dockerfile: Dockerfile
+    image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d
-    command: ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.database_name=dashboards"]
+    command: ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.database_name=app"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -25,20 +24,16 @@ services:
   backend_dashboards:
     build: 
       context: ./backend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       PYTHONPATH: /app
-      PYTHONUNBUFFERED: 1
     depends_on:
-      db_dashboards:
+      db:
         condition: service_healthy
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend/app:/app/app
-      # Only mount the app directory for hot reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -50,25 +45,16 @@ services:
   web_dashboards:
     build:
       context: ./web
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     environment:
-      NODE_ENV: development
-      CHOKIDAR_USEPOLLING: "true"
-      WATCHPACK_POLLING: "true"
-      NEXT_TELEMETRY_DISABLED: 1
+      NODE_ENV: production
     depends_on:
-      backend_dashboards:
+      backend:
         condition: service_healthy
     ports:
       - "3000:3000"
-    volumes:
-      - ./web:/app
-      - /app/node_modules
-      - /app/.next
-    # Run as current host user to avoid permission issues
-    user: "root"
     networks:
       - nginx-proxy-network
 

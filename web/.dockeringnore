@@ -1,0 +1,12 @@
+.git
+.gitignore
+README.md
+.env
+.env.local
+.env.production
+.vercel
+.next
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

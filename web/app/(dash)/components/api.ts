@@ -1,4 +1,4 @@
-export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API = process.env.NEXT_PUBLIC_API_URL || "http://backend_dashboards:8000";
 
 export async function runQuery(query: any) {
   const res = await fetch(`${API}/api/v1/builder/query`, {

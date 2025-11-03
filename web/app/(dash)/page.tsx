@@ -1,5 +1,5 @@
 import CanvasEditor from './components/CanvasEditor'
-import DashboardCanvas from '../DashboardCanvas'
+import DashboardCanvas from './DashboardCanvas'
 
 const demo = {
   layout: [
