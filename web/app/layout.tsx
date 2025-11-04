@@ -1,8 +1,17 @@
-export const metadata = { title: "Reporting" };
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+import "./globals.css";
+import { ReactNode } from "react";
+
+export const metadata = {
+  title: "SETTERS · Resource Dashboard",
+  description: "Mock resource planning & forecasting dashboard",
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
-      <body className="bg-slate-50 text-slate-900">{children}</body>
+      <body className="min-h-screen">
+        {children}
+      </body>
     </html>
   );
 }

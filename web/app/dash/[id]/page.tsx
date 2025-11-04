@@ -1,5 +1,5 @@
-import DashboardCanvas from '../../(dash)/DashboardCanvas'
-import { fetchDashboard } from '../../(dash)/components/api'
+import DashboardCanvas from '../../canvas/DashboardCanvas'
+import { fetchDashboard } from '../../canvas/components/api'
 
 export default async function Page({ params }: { params: { id: string } }) {
   const { schema, name } = await fetchDashboard(params.id)
