@@ -11,5 +11,5 @@ body {
 }
 
 .card {
-  @apply rounded-2xl shadow-soft bg-white;
+  @apply rounded-2xl shadow-md bg-white;
 }
