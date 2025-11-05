@@ -12,10 +12,13 @@ import { Filters, DeptAggregates } from "@/lib/dataModel";
 import { startOfPeriod, endOfPeriod, fmt, rangeDays } from "@/lib/date";
 import { capacityHours, demandHours, forecastHours, loadPct, statusByLoad } from "@/lib/calc";
 import { dataQualityScore } from "@/lib/quality";
+import { useData } from "@/hooks/useData";
 
 export default function SettersResourceDashboardMock(){
   const [filters, setFilters] = useState<Filters>({ role:'admin', period:'month', horizonMonths:3, seed:'SETTERS-SEED-42' });
-  const data = useMockData(filters);
+  const mock_data = useMockData(filters);
+  const data = useData(filters);
+  console.log(data)
   const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'>('exec');
   const [forecastHorizon] = useState<1|2|3>(3);
   const [selectedProject, setSelectedProject] = useState<number | null>(1);
@@ -25,13 +28,13 @@ export default function SettersResourceDashboardMock(){
 
   const deptAgg: DeptAggregates[] = useMemo(()=> {
     const out: DeptAggregates[] = [];
-    for (const d of data.departments) {
-      const deptUsers = data.users.filter(u => u.isActive);
+    for (const d of mock_data.departments) {
+      const deptUsers = mock_data.users.filter(u => u.isActive);
       let cap=0, dem=0, fc=0;
       for (const u of deptUsers) {
-        cap += capacityHours(u, data.norms, data.vacations, periodStart, periodEnd);
-        dem += demandHours(u, periodStart, periodEnd, data.time_entries, data.projects);
-        fc += forecastHours(u, periodStart, periodEnd, data.plans, data.projects, data.norms);
+        cap += capacityHours(u, mock_data.norms, mock_data.vacations, periodStart, periodEnd);
+        dem += demandHours(u, periodStart, periodEnd, mock_data.time_entries, mock_data.projects);
+        fc += forecastHours(u, periodStart, periodEnd, mock_data.plans, mock_data.projects, mock_data.norms);
       }
       const load = loadPct(dem, cap);
       const status = statusByLoad(load);
@@ -39,15 +42,15 @@ export default function SettersResourceDashboardMock(){
       out.push({ department: d, capacity: cap, demand: dem, forecast: fc, loadPct: load, status, dataQuality: quality });
     }
     return out;
-  }, [data, filters, periodStart, periodEnd]);
+  }, [mock_data, filters, periodStart, periodEnd]);
 
   const kpis = useMemo(()=>{
     const avgLoad = deptAgg.reduce((s,d)=>s+d.loadPct,0)/(deptAgg.length||1);
-    const activeUsers = data.users.filter(u=>u.isActive).length;
-    const activeProjects = data.projects.length;
+    const activeUsers = mock_data.users.filter(u=>u.isActive).length;
+    const activeProjects = mock_data.projects.length;
     const dq = deptAgg.reduce((s,d)=>s+d.dataQuality,0)/(deptAgg.length||1);
     return { avgLoad, activeUsers, activeProjects, dataQuality: dq };
-  }, [deptAgg, data]);
+  }, [deptAgg, mock_data]);
 
   const areaSeries = useMemo(()=> Array.from({length:8}).map((_,i)=> ({ week:`W${i+1}`, commercial: 200+30*i, presale: 80+10*i, internal: 60+8*i })), []);
   const pieData = useMemo(()=> [{type:'commercial',value:62},{type:'presale',value:18},{type:'internal',value:20}], []);
@@ -56,7 +59,7 @@ export default function SettersResourceDashboardMock(){
   const alerts = useMemo(()=> [{ type:'overload', severity:3, entity:'dept', refId:0, message:'Перегруз > 120% 3+ нед', from:'W2', to:'W5' } as any], []);
 
   // Dept view mock
-  const members = data.users.slice(0, 12);
+  const members = mock_data.users.slice(0, 12);
   const stacked = members.map(m => ({ name:m.name, commercial: Math.random()*40, presale: Math.random()*12, internal: Math.random()*10 }));
   const table = stacked.map(s => { const capacity=160; const demand=s.commercial+s.presale; const forecast=demand+s.internal; const load=(demand/capacity)*100; const status=load<70?'under':(load>110?'over':'ok'); return { name:s.name, loadPct:load, capacity, demand, forecast, status }; });
   const thirty = Array.from({length:30}).map((_,i)=> ({ date: fmt(new Date(Date.now()-(29-i)*86400000)), value: Math.random()*8 }));
