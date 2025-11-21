@@ -4,6 +4,7 @@ services:
     build: 
       context: ./db
       dockerfile: Dockerfile
+    restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -11,7 +12,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_dashboards_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d
     command: ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.database_name=dashboards"]
     healthcheck:
@@ -26,6 +27,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile.dev
+    restart: always
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -47,20 +49,41 @@ services:
     networks:
       - nginx-proxy-network
 
+  redis_dashboards:
+    image: redis:7-alpine
+    restart: always
+    # ports:
+    #   - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_dashboards_data:/data
+    networks:
+      - nginx-proxy-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   web_dashboards:
     build:
       context: ./web
       dockerfile: Dockerfile.dev
+    restart: always
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
       NEXT_TELEMETRY_DISABLED: 1
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_REDIS_URL: ${NEXT_PUBLIC_REDIS_URL}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     depends_on:
       backend_dashboards:
+        condition: service_healthy
+      redis_dashboards:
         condition: service_healthy
     ports:
       - "3000:3000"
@@ -73,7 +96,8 @@ services:
       - nginx-proxy-network
 
 volumes:
-  postgres_data:
+  postgres_dashboards_data:
+  redis_dashboards_data:
 
 networks:
   nginx-proxy-network:
