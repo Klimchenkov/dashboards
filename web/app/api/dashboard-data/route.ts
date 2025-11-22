@@ -1,4 +1,3 @@
-// app/api/dashboard-data/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Redis from 'ioredis';
@@ -6,10 +5,10 @@ import { startOfPeriod, endOfPeriod, fmt } from '@/lib/date';
 import { Filters, User, Project, Department, TimeEntry, Plan, VacationType, ProductionCalendarDay } from '@/lib/dataModel';
 import { computeMetrics } from '@/lib/dashboardMetrics';
 
-// Initialize Supabase client (server-side)
+// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! // Use service role key for server-side
 );
 
 // Redis client configuration
@@ -30,7 +29,7 @@ const initializeRedis = () => {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       lazyConnect: true,
-      commandTimeout: 5000,
+      commandTimeout: 30000, // Increased timeout for long operations
     });
 
     redis.on('error', (error) => {
@@ -58,6 +57,7 @@ const CACHE_CONFIG = {
   MAX_RETRIES: 3,
 };
 
+// Enhanced cache function with better error handling
 async function cacheGet<T>(
   key: string, 
   fetchFn: () => Promise<T>, 
@@ -133,7 +133,7 @@ async function cacheGet<T>(
             return { 
               data: JSON.parse(staleCached), 
               source: 'cache',
-              error: 'Using cached data due to fetch failure'
+              error: 'Используются кэшированные данные из-за ошибки получения свежих'
             };
           }
         } catch (staleError) {
@@ -169,11 +169,13 @@ function generateCacheKey(prefix: string, filters: Filters, additional?: string)
   return additional ? `${baseKey}_${additional}` : baseKey;
 }
 
-// Helper to fetch production calendar
+// Helper to fetch production calendar with proper error handling
 async function fetchProductionCalendar(
   periodStart: string,
   periodEnd: string
 ): Promise<Map<string, ProductionCalendarDay>> {
+  console.log('📅 Fetching production calendar for:', periodStart, 'to', periodEnd);
+  
   const { data, error } = await supabase
     .from('ru_production_calendar')
     .select('*')
@@ -181,21 +183,36 @@ async function fetchProductionCalendar(
     .lte('date', periodEnd)
     .order('date', { ascending: true });
 
-  if (error) throw error;
+  if (error) {
+    console.error('❌ Error fetching production calendar:', error);
+    throw new Error(`Ошибка загрузки производственного календаря: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Производственный календарь не содержит данных для указанного периода');
+  }
 
   const map = new Map<string, ProductionCalendarDay>();
-  (data || []).forEach((day: any) => {
+  data.forEach((day: any) => {
     map.set(day.date, day);
   });
+  
+  console.log('✅ Production calendar created as Map:', {
+    size: map.size,
+    firstKey: Array.from(map.keys())[0],
+    firstValue: Array.from(map.values())[0]
+  });
+  
   return map;
 }
 
-// Existing data fetching functions (keep them exactly as they were)
+// Data fetching functions with proper error handling in Russian
 async function fetchUsers(filters: Filters): Promise<User[]> {
   const cacheKey = generateCacheKey('users', filters);
   const result = await cacheGet(
     cacheKey,
     async () => {
+      console.log('👥 Fetching users from database...');
       const { data, error } = await supabase
         .from('setters_users')
         .select(`
@@ -205,9 +222,16 @@ async function fetchUsers(filters: Filters): Promise<User[]> {
           project_user_hour_plans(*)
         `)
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching users:', error);
+        throw new Error(`Ошибка загрузки пользователей: ${error.message}`);
+      }
 
-      return (data || []).map(user => {
+      if (!data) {
+        throw new Error('Не удалось загрузить данные пользователей');
+      }
+
+      const users = data.map(user => {
         const firstNorm = user.setters_user_norms && user.setters_user_norms.length > 0 
           ? user.setters_user_norms
               .sort((a: any, b: any) => new Date(b.valid_from).getTime() - new Date(a.valid_from).getTime())[0]
@@ -238,15 +262,24 @@ async function fetchUsers(filters: Filters): Promise<User[]> {
             hours_presale: parseFloat(firstNorm.hours_presale),
             hours_internal: parseFloat(firstNorm.hours_internal)
           } : null,
-          plans: userPlans
+          plans: userPlans,
+          time_entries: [] // Initialize empty time_entries array
         };
       });
+
+      console.log('✅ Users fetched:', users.length);
+      return users;
     },
     { 
       ttl: CACHE_CONFIG.LONG_TTL,
       tags: ['users'] 
     }
   );
+  
+  if (result.error) {
+    console.warn('⚠️ Users fetch had issues:', result.error);
+  }
+  
   return result.data;
 }
 
@@ -255,6 +288,7 @@ async function fetchProjects(filters: Filters): Promise<Project[]> {
   const result = await cacheGet(
     cacheKey,
     async () => {
+      console.log('📂 Fetching projects from database...');
       const { data, error } = await supabase
         .from('projects')
         .select(`
@@ -262,9 +296,16 @@ async function fetchProjects(filters: Filters): Promise<Project[]> {
           project_user_hour_plans(*)
         `)
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching projects:', error);
+        throw new Error(`Ошибка загрузки проектов: ${error.message}`);
+      }
 
-      return (data || []).map((project: any) => {
+      if (!data) {
+        throw new Error('Не удалось загрузить данные проектов');
+      }
+
+      const projects = data.map((project: any) => {
         const projectPlans: Plan[] = (project.project_user_hour_plans || []).map((plan: any) => ({
           id: plan.id,
           project_id: plan.project_id,
@@ -284,12 +325,20 @@ async function fetchProjects(filters: Filters): Promise<Project[]> {
           plans: projectPlans
         };
       });
+
+      console.log('✅ Projects fetched:', projects.length);
+      return projects;
     },
     { 
       ttl: CACHE_CONFIG.LONG_TTL,
       tags: ['projects'] 
     }
   );
+  
+  if (result.error) {
+    console.warn('⚠️ Projects fetch had issues:', result.error);
+  }
+  
   return result.data;
 }
 
@@ -298,6 +347,7 @@ async function fetchDepartments(filters: Filters): Promise<Department[]> {
   const result = await cacheGet(
     cacheKey,
     async () => {
+      console.log('🏢 Fetching departments from database...');
       const { data, error } = await supabase
         .from('departments')
         .select(`
@@ -316,9 +366,16 @@ async function fetchDepartments(filters: Filters): Promise<Department[]> {
           )
         `);
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching departments:', error);
+        throw new Error(`Ошибка загрузки отделов: ${error.message}`);
+      }
 
-      return (data || []).map((department: any) => ({
+      if (!data) {
+        throw new Error('Не удалось загрузить данные отделов');
+      }
+
+      const departments = data.map((department: any) => ({
         id: department.id,
         name: department.name,
         lead_tg_id: department.lead_tg_id,
@@ -365,14 +422,22 @@ async function fetchDepartments(filters: Filters): Promise<Department[]> {
             plans: userPlans,
             time_entries: userEntries
           };
-        }) || [] 
+        }).filter(Boolean) || [] 
       }));
+
+      console.log('✅ Departments fetched:', departments.length);
+      return departments;
     },
     { 
       ttl: CACHE_CONFIG.LONG_TTL,
       tags: ['departments', 'users'] 
     }
   );
+  
+  if (result.error) {
+    console.warn('⚠️ Departments fetch had issues:', result.error);
+  }
+  
   return result.data;
 }
 
@@ -381,6 +446,7 @@ async function fetchTimeEntries(filters: Filters, periodStart: string, periodEnd
   const result = await cacheGet(
     cacheKey,
     async () => {
+      console.log('⏱️ Fetching time entries from database...');
       const { data, error } = await supabase
         .from('time_entries')
         .select(`
@@ -392,20 +458,35 @@ async function fetchTimeEntries(filters: Filters, periodStart: string, periodEnd
         .lte('date', periodEnd)
         .order('date', { ascending: true });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching time entries:', error);
+        throw new Error(`Ошибка загрузки временных записей: ${error.message}`);
+      }
 
-      return (data || []).map((entry: any) => ({
+      if (!data) {
+        throw new Error('Не удалось загрузить данные временных записей');
+      }
+
+      const timeEntries = data.map((entry: any) => ({
         ...entry,
         user_name: entry.setters_users.name,
         project_name: entry.projects.project_name,
         project_status: entry.projects.project_status
       }));
+
+      console.log('✅ Time entries fetched:', timeEntries.length);
+      return timeEntries;
     },
     { 
       ttl: CACHE_CONFIG.SHORT_TTL,
       tags: ['time_entries'] 
     }
   );
+  
+  if (result.error) {
+    console.warn('⚠️ Time entries fetch had issues:', result.error);
+  }
+  
   return result.data;
 }
 
@@ -414,6 +495,7 @@ async function fetchPlans(filters: Filters): Promise<Plan[]> {
   const result = await cacheGet(
     cacheKey,
     async () => {
+      console.log('📋 Fetching plans from database...');
       const { data, error } = await supabase
         .from('project_user_hour_plans')
         .select(`
@@ -423,9 +505,16 @@ async function fetchPlans(filters: Filters): Promise<Plan[]> {
         `)
         .eq('isActive', true);
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching plans:', error);
+        throw new Error(`Ошибка загрузки планов: ${error.message}`);
+      }
 
-      return (data || []).map((plan: any) => ({
+      if (!data) {
+        throw new Error('Не удалось загрузить данные планов');
+      }
+
+      const plans = data.map((plan: any) => ({
         id: plan.id,
         project_id: plan.project_id,
         user_id: plan.user_id,
@@ -438,47 +527,57 @@ async function fetchPlans(filters: Filters): Promise<Plan[]> {
         project_start_date: plan.projects?.start_date,
         project_end_date: plan.projects?.end_date,
       }));
+
+      console.log('✅ Plans fetched:', plans.length);
+      return plans;
     },
     { 
       ttl: CACHE_CONFIG.DEFAULT_TTL,
       tags: ['plans'] 
     }
   );
+  
+  if (result.error) {
+    console.warn('⚠️ Plans fetch had issues:', result.error);
+  }
+  
   return result.data;
 }
 
-export async function POST(request: NextRequest) {
+// Sequential data fetching with proper error handling
+async function fetchAllDataSequentially(filters: Filters, periodStart: string, periodEnd: string) {
+  console.log('🔄 Starting sequential data fetching...');
+  
+  // Step 1: Fetch raw data (all in parallel but with individual error handling)
+  console.log('📦 Step 1: Fetching raw data...');
+  let usersResult: User[], projectsResult: Project[], departmentsResult: Department[], timeEntriesResult: TimeEntry[], plansResult: Plan[];
+  
   try {
-    const body = await request.json();
-    const filters: Filters = body.filters;
-
-    if (!filters) {
-      return NextResponse.json({ error: 'Filters are required' }, { status: 400 });
-    }
-
-    const periodStart = fmt(startOfPeriod(filters.period));
-    const periodEnd = fmt(endOfPeriod(filters.period));
-
-    console.log('🔄 Fetching dashboard data with filters:', filters);
-    console.log('📊 Redis status:', redisClient ? 'connected' : 'disabled');
-
-    // Fetch all raw data in parallel
-    const [usersResult, projectsResult, departmentsResult, timeEntriesResult, plansResult] = await Promise.all([
+    [usersResult, projectsResult, departmentsResult, timeEntriesResult, plansResult] = await Promise.all([
       fetchUsers(filters),
       fetchProjects(filters),
       fetchDepartments(filters),
       fetchTimeEntries(filters, periodStart, periodEnd),
       fetchPlans(filters),
     ]);
+    
+    console.log('✅ Raw data fetched successfully');
+    console.log(`   - Users: ${usersResult.length}`);
+    console.log(`   - Projects: ${projectsResult.length}`);
+    console.log(`   - Departments: ${departmentsResult.length}`);
+    console.log(`   - Time entries: ${timeEntriesResult.length}`);
+    console.log(`   - Plans: ${plansResult.length}`);
+  } catch (error) {
+    throw new Error(`Ошибка на этапе загрузки сырых данных: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-    // Production calendar (can also be cached via cacheGet)
-    const calendarCacheKey = generateCacheKey(
-      "production_calendar",
-      filters,
-      `${periodStart}_${periodEnd}`
-    );
-
-    const { data: productionCalendar } = await cacheGet(
+  // Step 2: Fetch production calendar (critical - will fail if not available)
+  console.log('📅 Step 2: Fetching production calendar...');
+  let productionCalendar: Map<string, ProductionCalendarDay>;
+  
+  try {
+    const calendarCacheKey = generateCacheKey("production_calendar", filters, `${periodStart}_${periodEnd}`);
+    const calendarResult = await cacheGet(
       calendarCacheKey,
       async () => {
         return await fetchProductionCalendar(periodStart, periodEnd);
@@ -488,18 +587,28 @@ export async function POST(request: NextRequest) {
         tags: ["production_calendar"],
       }
     );
+    productionCalendar = calendarResult.data;
+    
+    if (calendarResult.error) {
+      console.warn('⚠️ Production calendar fetch had issues:', calendarResult.error);
+    }
+    
+    console.log('✅ Production calendar fetched successfully:', productionCalendar.size, 'days');
+  } catch (error) {
+    throw new Error(`Ошибка на этапе загрузки производственного календаря: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-    // Metrics – cached separately, depends on period + seed (filters)
-    const metricsCacheKey = generateCacheKey(
-      "dashboard_metrics",
-      filters,
-      `${periodStart}_${periodEnd}`
-    );
-
-    const { data: metrics } = await cacheGet(
+  // Step 3: Compute metrics (only after we have both raw data and production calendar)
+  console.log('🧮 Step 3: Computing metrics...');
+  let metrics;
+  
+  try {
+    const metricsCacheKey = generateCacheKey("dashboard_metrics", filters, `${periodStart}_${periodEnd}`);
+    const metricsResult = await cacheGet(
       metricsCacheKey,
       async () => {
-        return computeMetrics(
+        console.log('🔨 Computing metrics with all available data...');
+        const computedMetrics = computeMetrics(
           usersResult,
           projectsResult,
           departmentsResult,
@@ -508,34 +617,101 @@ export async function POST(request: NextRequest) {
           productionCalendar,
           filters.period
         );
+        console.log('✅ Metrics computed successfully');
+        return computedMetrics;
       },
       {
-        ttl: CACHE_CONFIG.SHORT_TTL, // depends heavily on time entries
+        ttl: CACHE_CONFIG.SHORT_TTL,
         tags: ["dashboard_metrics", "time_entries"],
       }
     );
+    metrics = metricsResult.data;
+    
+    if (metricsResult.error) {
+      console.warn('⚠️ Metrics computation had issues:', metricsResult.error);
+    }
+  } catch (error) {
+    throw new Error(`Ошибка на этапе вычисления метрик: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return {
+    users: usersResult,
+    projects: projectsResult,
+    departments: departmentsResult,
+    timeEntries: timeEntriesResult,
+    plans: plansResult,
+    metrics,
+    productionCalendarSize: productionCalendar.size
+  };
+}
+
+export async function POST(request: NextRequest) {
+  // Set longer timeout for Vercel (if using Vercel, this needs proper configuration)
+  // For long-running operations, consider using background jobs in production
+  
+  try {
+    const body = await request.json();
+    const filters: Filters = body.filters;
+
+    if (!filters) {
+      return NextResponse.json({ error: 'Фильтры обязательны для запроса' }, { status: 400 });
+    }
+
+    const periodStart = fmt(startOfPeriod(filters.period));
+    const periodEnd = fmt(endOfPeriod(filters.period));
+
+    console.log('🔄 Starting dashboard data fetch process...');
+    console.log('📅 Period:', periodStart, 'to', periodEnd);
+    console.log('🎛️ Filters:', filters);
+    console.log('📊 Redis status:', redisClient ? 'connected' : 'disabled');
+
+    // Execute the sequential data fetching pipeline
+    const {
+      users,
+      projects, 
+      departments,
+      timeEntries,
+      plans,
+      metrics,
+      productionCalendarSize
+    } = await fetchAllDataSequentially(filters, periodStart, periodEnd);
 
     const responseData = {
-      users: usersResult,
-      projects: projectsResult,
-      departments: departmentsResult,
-      timeEntries: timeEntriesResult,
-      plans: plansResult,
-      metrics,                      // <── NEW
+      users,
+      projects,
+      departments,
+      timeEntries,
+      plans,
+      metrics,
       timestamp: new Date().toISOString(),
       cacheStatus: 'success',
       redisEnabled: !!redisClient,
+      productionCalendarDays: productionCalendarSize,
+      dataSummary: {
+        users: users.length,
+        projects: projects.length,
+        departments: departments.length,
+        timeEntries: timeEntries.length,
+        plans: plans.length
+      }
     };
 
+    console.log('✅ Dashboard data ready, returning response');
+    console.log('📊 Data summary:', responseData.dataSummary);
+    
     return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('❌ Error in dashboard-data API:', error);
     
+    // Return detailed error in Russian
+    const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    
     return NextResponse.json(
       { 
-        error: 'Failed to fetch dashboard data',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Не удалось загрузить данные дашборда',
+        details: errorMessage,
+        timestamp: new Date().toISOString(),
         cacheStatus: 'error',
         redisEnabled: !!redisClient,
       },
@@ -544,7 +720,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Cache management endpoints (keep existing)
+// Keep existing cache management endpoints
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

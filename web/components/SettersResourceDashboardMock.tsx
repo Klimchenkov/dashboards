@@ -10,14 +10,10 @@ import ForecastView from "@/components/ForecastView";
 import ProjectDetailView from "@/components/ProjectDetailView";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { useProductionCalendar } from "@/hooks/useProductionCalendar";
 import { useFilters } from "@/hooks/useFilters";
-import { Filters, DeptAggregates } from "@/lib/dataModel";
-import { startOfPeriod, endOfPeriod, fmt, rangeDays } from "@/lib/date";
-import { capacityHours, demandHours, forecastHours, loadPct, statusByLoad } from "@/lib/calc";
-import { dataQualityScore } from "@/lib/quality";
-import { calculateWeeklyLoad } from "@/lib/weeklyCalculations";
-import { calculateHoursDistribution } from "@/lib/pieCalculations";
+import { Filters } from "@/lib/dataModel";
+import { fmt } from "@/lib/date";
+
 
 
 export default function SettersResourceDashboardMock() {
@@ -38,19 +34,24 @@ export default function SettersResourceDashboardMock() {
     }
   }, [filtersLoading, filters, appliedFilters]);
 
-  const { data, loading, error, fetchProgress, refetch } = useDashboardData(appliedFilters || filters);
-  console.log(data)
+  const dataFilters = appliedFilters || filters;
+  const { data, loading, error, fetchProgress, refetch } = useDashboardData(dataFilters);
+  
+  useEffect(() => {
+    if (data) {
+      console.log('Dashboard data updated:', {
+        users: data.users?.length,
+        projects: data.projects?.length,
+        timeEntries: data.timeEntries?.length,
+        timestamp: data.timestamp
+      });
+    }
+  }, [data]);
   
   const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'>('exec');
   const [forecastHorizon] = useState<1|2|3>(3);
   const [selectedProject, setSelectedProject] = useState<number | null>(1);
   const [isApplyingFilters, setIsApplyingFilters] = useState(false);
-
-
-  const periodStart = fmt(startOfPeriod(filters.period));
-  const periodEnd = fmt(endOfPeriod(filters.period));
-
-  const { calendar: productionCalendar, loading: calendarLoading } = useProductionCalendar(periodStart, periodEnd);
 
   const handleFilterChange = useCallback((key: string, value: any) => {
     console.log(`Filter changed: ${key} = ${value}`);
@@ -65,9 +66,9 @@ export default function SettersResourceDashboardMock() {
       // 1) Save current draft filters to backend
       await applyFilters();
       
-      // 2) Promote current draft filters to applied filters
-      // This will trigger useDashboardData to refetch with new filters
-      setAppliedFilters(filters);
+      // Update applied filters to trigger data refetch
+      // Use functional update to ensure we have latest filters
+      setAppliedFilters(prev => ({ ...filters }));
       
       // Note: No explicit refetch() needed because useDashboardData
       // will automatically refetch when appliedFilters changes
@@ -85,90 +86,19 @@ export default function SettersResourceDashboardMock() {
     // until user explicitly applies the reset draft.
   }, [resetFilters]);
 
-  const deptAgg: DeptAggregates[] = useMemo(() => {
-    if (!productionCalendar || !data) return [];
-
-    const out: DeptAggregates[] = [];
-    for (const d of data.departments) {
-      const deptUsers = d.users;
-
-      let cap = 0, dem = 0, fc = 0;
-      for (const u of deptUsers) {
-        cap += capacityHours(u, periodStart, periodEnd, productionCalendar);
-        dem += demandHours(u, periodStart, periodEnd, data.timeEntries);
-        fc += forecastHours(u, periodStart, periodEnd, data.projects, productionCalendar);
-      }
-      const load = loadPct(dem, cap);
-      const status = statusByLoad(load);
-      
-      const qualityResult = dataQualityScore(
-        d, 
-        deptUsers, 
-        data.projects, 
-        data.timeEntries, 
-        data.plans, 
-        periodStart, 
-        periodEnd, 
-        productionCalendar
-      );
-      
-      out.push({ 
-        department: d, 
-        capacity: cap, 
-        demand: dem, 
-        forecast: fc, 
-        loadPct: load, 
-        status, 
-        dataQuality: qualityResult.score,
-        dataQualityMetrics: qualityResult.metrics
-      });
-    }
-    return out;
-  }, [data, filters, periodStart, periodEnd, productionCalendar, loading]);
-
-  const kpis = useMemo(()=>{
-    if (loading) return { avgLoad: 0, activeUsers: 0, activeProjects: 0, dataQuality: 0 };
-    
-    const avgLoad = deptAgg.reduce((s,d)=>s+d.loadPct,0)/(deptAgg.length||1);
-    const activeUsers = data.users.filter(u=>u.isActive).length;
-    const activeProjects = data.projects.filter(p=>p.isActive).length;
-    const dq = deptAgg.reduce((s,d)=>s+d.dataQuality,0)/(deptAgg.length||1);
-    return { avgLoad, activeUsers, activeProjects, dataQuality: dq };
-  }, [deptAgg, data, loading]);
-
-  const areaSeries = useMemo(() => {
-    if (!productionCalendar || loading) return [];
-
-    const periodStart = startOfPeriod(filters.period);
-    const periodEnd = endOfPeriod(filters.period);
-    
-    return calculateWeeklyLoad(
-        data.users,
-        data.timeEntries,
-        data.projects,
-        productionCalendar,
-        periodStart,
-        periodEnd
-      );
-    }, [data?.users, data?.timeEntries, data?.projects, productionCalendar, filters.period, loading]);
+  const showLoadingOverlay = (loading || !data || filtersLoading ) && !error && !isApplyingFilters;
   
-  const pieData = useMemo(() => {
-    if (loading || !data.timeEntries || data.timeEntries.length === 0) {
-      return [];
-    }
-    const periodStart = startOfPeriod(filters.period);
-    const periodEnd = endOfPeriod(filters.period);
-    
-    return calculateHoursDistribution(
-      data.timeEntries,
-      data.projects,
-      periodStart.toISOString().split('T')[0],
-      periodEnd.toISOString().split('T')[0]
-    );
-  }, [data?.timeEntries, data?.projects, filters.period, loading]);
+  // Show error state when we have an error AND no data (or when refetching after error)
+  const showErrorState = error && (!data || isApplyingFilters);
 
-  const composedData = useMemo(()=> deptAgg.map(d=>({ dept:d.department.name, capacity:Math.round(d.capacity), demand:Math.round(d.demand) })), [deptAgg]);
-  const scatterData = useMemo(()=> deptAgg.map(d=>({ commercialShare: Math.random(), load: d.loadPct })), [deptAgg]);
+  const deptAgg = data?.metrics?.deptAgg || [];
+  const kpis = data?.metrics?.kpis || { avgLoad: 0, activeUsers: 0, activeProjects: 0, dataQuality: 0 };
+  const areaSeries = data?.metrics?.areaSeries || [];
+  const pieData = data?.metrics?.pieData || [];
+  const composedData = data?.metrics?.composedData || [];
+  const scatterData = data?.metrics?.scatterData || [];
+
+
   const alerts = useMemo(()=> [{ type:'overload', severity:3, entity:'dept', refId:0, message:'Перегруз > 120% 3+ нед', from:'W2', to:'W5' } as any], []);
 
     // Dept view mock
@@ -180,12 +110,12 @@ export default function SettersResourceDashboardMock() {
   const deptQuality = 0.78;
   
   // Show loading overlay while data is being fetched
-  if ( loading || calendarLoading || !data || filtersLoading || isApplyingFilters) {
+  if ( showLoadingOverlay )  {
     return <LoadingOverlay progress={fetchProgress} message="Загружаем данные ..." />;
   }
 
   // Show error state
-  if (error) {
+  if (showErrorState) {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <FilterBar 
