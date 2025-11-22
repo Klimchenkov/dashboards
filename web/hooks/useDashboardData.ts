@@ -1,7 +1,7 @@
 // hooks/useDashboardData.ts
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Filters, User, Project, Department, TimeEntry, Plan } from '@/lib/dataModel';
+import { Filters, User, Project, Department, TimeEntry, Plan, DashboardMetrics } from '@/lib/dataModel';
 
 interface DashboardData {
   users: User[];
@@ -9,6 +9,7 @@ interface DashboardData {
   departments: Department[];
   timeEntries: TimeEntry[];
   plans: Plan[];
+  metrics: DashboardMetrics;
   timestamp: string;
   cacheStatus: string;
 }

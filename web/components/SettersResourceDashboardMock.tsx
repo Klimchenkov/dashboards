@@ -1,6 +1,6 @@
 // SettersResourceDashboardMock.tsx
 'use client';
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Tabs, Card } from "@/components/ui";
 import FilterBar from "@/components/FilterBar";
 import ExecView from "@/components/ExecView";
@@ -11,6 +11,7 @@ import ProjectDetailView from "@/components/ProjectDetailView";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useProductionCalendar } from "@/hooks/useProductionCalendar";
+import { useFilters } from "@/hooks/useFilters";
 import { Filters, DeptAggregates } from "@/lib/dataModel";
 import { startOfPeriod, endOfPeriod, fmt, rangeDays } from "@/lib/date";
 import { capacityHours, demandHours, forecastHours, loadPct, statusByLoad } from "@/lib/calc";
@@ -20,17 +21,69 @@ import { calculateHoursDistribution } from "@/lib/pieCalculations";
 
 
 export default function SettersResourceDashboardMock() {
-  const [filters, setFilters] = useState<Filters>({ role:'admin', period:'month', horizonMonths:3, seed:'SETTERS-SEED-42' });
-  const { data, loading, error, fetchProgress, refetch } = useDashboardData(filters);
+  const { 
+    filters, 
+    isLoading: filtersLoading, 
+    updateFilter, 
+    applyFilters,
+    resetFilters,
+    hasPendingChanges 
+  } = useFilters();
+
+  const [appliedFilters, setAppliedFilters] = useState<Filters | null>(null);
+
+  useEffect(() => {
+    if (!filtersLoading && !appliedFilters) {
+      setAppliedFilters(filters);
+    }
+  }, [filtersLoading, filters, appliedFilters]);
+
+  const { data, loading, error, fetchProgress, refetch } = useDashboardData(appliedFilters || filters);
   console.log(data)
+  
   const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'>('exec');
   const [forecastHorizon] = useState<1|2|3>(3);
   const [selectedProject, setSelectedProject] = useState<number | null>(1);
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
+
 
   const periodStart = fmt(startOfPeriod(filters.period));
   const periodEnd = fmt(endOfPeriod(filters.period));
 
   const { calendar: productionCalendar, loading: calendarLoading } = useProductionCalendar(periodStart, periodEnd);
+
+  const handleFilterChange = useCallback((key: string, value: any) => {
+    console.log(`Filter changed: ${key} = ${value}`);
+    updateFilter(key as any, value);
+  }, [updateFilter]);
+
+  const handleUpdateData = useCallback(async () => {
+    if (!hasPendingChanges) return;
+    
+    setIsApplyingFilters(true);
+    try {
+      // 1) Save current draft filters to backend
+      await applyFilters();
+      
+      // 2) Promote current draft filters to applied filters
+      // This will trigger useDashboardData to refetch with new filters
+      setAppliedFilters(filters);
+      
+      // Note: No explicit refetch() needed because useDashboardData
+      // will automatically refetch when appliedFilters changes
+    } catch (error) {
+      console.error('Failed to update data:', error);
+    } finally {
+      setIsApplyingFilters(false);
+    }
+  }, [hasPendingChanges, applyFilters, filters]);
+
+  const handleResetFilters = useCallback(async () => {
+    await resetFilters();
+    // Note: We don't reset appliedFilters here because resetFilters
+    // only affects the draft UI state. Data remains with current applied filters
+    // until user explicitly applies the reset draft.
+  }, [resetFilters]);
 
   const deptAgg: DeptAggregates[] = useMemo(() => {
     if (!productionCalendar || !data) return [];
@@ -127,7 +180,7 @@ export default function SettersResourceDashboardMock() {
   const deptQuality = 0.78;
   
   // Show loading overlay while data is being fetched
-  if (loading || calendarLoading || !data) {
+  if ( loading || calendarLoading || !data || filtersLoading || isApplyingFilters) {
     return <LoadingOverlay progress={fetchProgress} message="Загружаем данные ..." />;
   }
 
@@ -135,6 +188,14 @@ export default function SettersResourceDashboardMock() {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto p-6">
+        <FilterBar 
+          filters={filters} 
+          onChange={handleFilterChange} 
+          onUpdate={handleUpdateData}
+          onReset={handleResetFilters}
+          hasPendingChanges={hasPendingChanges}
+          isUpdating={isApplyingFilters}
+        />
         <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
           <h2 className="text-lg font-semibold text-destructive mb-2">Ошибка загрузки данных</h2>
           <p className="text-sm mb-4">{error}</p>
@@ -150,7 +211,14 @@ export default function SettersResourceDashboardMock() {
   }
 
   return (<div className="max-w-7xl mx-auto p-6">
-    <FilterBar onChange={setFilters} />
+    <FilterBar 
+      filters={filters} 
+      onChange={handleFilterChange} 
+      onUpdate={handleUpdateData}
+      onReset={handleResetFilters}
+      hasPendingChanges={hasPendingChanges}
+      isUpdating={isApplyingFilters}
+    />
     <Tabs tabs={[
       { key:'exec', label:'🏢 Компания' },
       { key:'dept', label:'👥 Отдел' },
