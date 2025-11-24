@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Filters, User, Project, Department, TimeEntry, Plan, DashboardMetrics } from '@/lib/dataModel';
+import { Filters, User, Project, Department, TimeEntry, Plan, DashboardMetrics, ExtendedFilters } from '@/lib/dataModel';
 
 interface DashboardData {
   users: User[];
@@ -28,6 +28,22 @@ interface UseDashboardDataReturn {
   refetch: () => void;
 }
 
+// Get user data from localStorage (same as in useFilters)
+const getUserData = () => {
+  if (typeof window !== 'undefined') {
+    const userDataStr = localStorage.getItem('userData');
+    if (userDataStr) {
+      try {
+        return JSON.parse(userDataStr);
+      } catch (error) {
+        console.error('Failed to parse user data:', error);
+        return null;
+      }
+    }
+  }
+  return null;
+};
+
 // Progress simulation for better UX
 const simulateProgress = (currentProgress: number, setProgress: (progress: number) => void) => {
   const interval = setInterval(() => {
@@ -42,7 +58,7 @@ const simulateProgress = (currentProgress: number, setProgress: (progress: numbe
   return () => clearInterval(interval);
 };
 
-export function useDashboardData(filters: Filters): UseDashboardDataReturn {
+export function useDashboardData(filters: ExtendedFilters): UseDashboardDataReturn {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,12 +79,23 @@ export function useDashboardData(filters: Filters): UseDashboardDataReturn {
 
       console.log('🔄 Fetching dashboard data with filters:', filters);
 
+      // Get user restrictions from localStorage
+      const userData = getUserData();
+      const userRestrictions = userData ? {
+        full_access: userData.full_access,
+        lead_departments: userData.lead_departments || [],
+        lead_projects: userData.lead_projects || []
+      } : null;
+
       const response = await fetch('/api/dashboard-data', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ filters }),
+        body: JSON.stringify({ 
+          filters,
+          userRestrictions // Include user restrictions in the request
+        }),
         signal: controller.signal
       });
 

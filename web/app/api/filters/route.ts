@@ -1,27 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Redis from 'ioredis';
-
-// Initialize Redis
-let redis: Redis | null = null;
-const initializeRedis = () => {
-  if (redis) return redis;
-  
-  if (process.env.REDIS_URL) {
-    redis = new Redis(process.env.REDIS_URL);
-  } else if (process.env.REDIS_HOST && process.env.REDIS_PORT) {
-    redis = new Redis({
-      host: process.env.REDIS_HOST,
-      port: parseInt(process.env.REDIS_PORT),
-      ...(process.env.REDIS_PASSWORD && { password: process.env.REDIS_PASSWORD })
-    });
-  } else {
-    console.warn('Redis configuration not found, using memory fallback');
-  }
-  
-  return redis;
-};
-
-const redisClient = initializeRedis();
+import { redis } from '@/lib/redis';
 
 // Simple in-memory fallback for development
 const memoryCache = new Map();
@@ -38,8 +16,8 @@ export async function GET(request: NextRequest) {
     const cacheKey = `user_filters_${userId}`;
     let filters = null;
 
-    if (redisClient) {
-      const cached = await redisClient.get(cacheKey);
+    if (redis) {
+      const cached = await redis.get(cacheKey);
       if (cached) {
         filters = JSON.parse(cached);
       }
@@ -51,7 +29,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       filters,
       timestamp: new Date().toISOString(),
-      cacheStatus: filters ? 'hit' : 'miss'
+      cacheStatus: filters ? 'hit' : 'miss',
+      redisEnabled: !!redis
     });
 
   } catch (error) {
@@ -74,8 +53,8 @@ export async function POST(request: NextRequest) {
 
     const cacheKey = `user_filters_${userId}`;
 
-    if (redisClient) {
-      await redisClient.set(cacheKey, JSON.stringify(filters), 'EX', 30 * 24 * 60 * 60); // 30 days
+    if (redis) {
+      await redis.set(cacheKey, JSON.stringify(filters), 'EX', 30 * 24 * 60 * 60); // 30 days
     } else {
       // Fallback to memory cache
       memoryCache.set(cacheKey, filters);
@@ -83,7 +62,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      redisEnabled: !!redis
     });
 
   } catch (error) {

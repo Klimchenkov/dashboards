@@ -16,6 +16,7 @@
     "ioredis": "^5.8.2",
     "lucide-react": "^0.263.0",
     "next": "^14.2.33",
+    "node-telegram-bot-api": "^0.66.0",
     "postcss": "^8.4.38",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -25,6 +26,8 @@
     "seedrandom": "^3.0.5",
     "swr": "^2.3.0",
     "tailwindcss": "^3.4.10",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0",
     "xlsx": "^0.18.5",
     "zod": "^3.23.8"
   },

@@ -1,8 +1,23 @@
-//web/components/ExecView.tsx
 'use client';
 import { Card, Button } from "./ui";
 import { DeptAggregates } from "@/lib/dataModel";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, ScatterChart, Scatter } from "recharts";
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  BarChart, 
+  Bar, 
+  CartesianGrid, 
+  ScatterChart, 
+  Scatter,
+  ReferenceLine
+} from "recharts";
 import { exportToXLSX } from "@/lib/xlsxExport";
 import HintTooltip from "./HintTooltip"; 
 
@@ -27,6 +42,69 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
     };
     return `${typeMap[entry.type] || entry.type}: ${entry.percentage?.toFixed(1) || entry.value.toFixed(1)}%`;
   };
+
+  // Function to get today line position
+  const getTodayLine = () => {
+    const today = new Date();
+    // Find the first forecast week to place the today line
+    const historicalWeeks = areaSeries.filter(w => !w.isForecast);
+    if (historicalWeeks.length > 0) {
+      // Place the today line at the start of the first forecast week
+      return {
+        x: historicalWeeks[historicalWeeks.length-1].week,
+        label: 'Текущая неделя'
+      };
+    }
+    
+    // If no forecast weeks, check if we have any data after today
+    const todayWeeks = areaSeries.filter(w => {
+      const weekEnd = new Date(w.weekEnd);
+      return weekEnd > today;
+    });
+    
+    if (todayWeeks.length > 0) {
+      return {
+        x: todayWeeks[0].week,
+        label: 'Сегодня'
+      };
+    }
+    
+    return null;
+  };
+
+  const todayLine = getTodayLine();
+
+  // Separate historical and forecast data for rendering
+  const historicalSeries = areaSeries.filter(w => !w.isForecast);
+  const forecastSeries = areaSeries.filter(w => w.isForecast);
+
+  // Calculate statistics
+  const totalCommercial = areaSeries.reduce((sum, week) => sum + week.commercial, 0);
+  const totalPresale = areaSeries.reduce((sum, week) => sum + week.presale, 0);
+  const totalInternal = areaSeries.reduce((sum, week) => sum + week.internal, 0);
+  const totalWeeks = areaSeries.length;
+  const historicalWeeks = historicalSeries.length;
+  const forecastWeeks = forecastSeries.length;
+
+  // Create a single data array with conditional styling
+  const chartData = areaSeries.map(week => ({
+    ...week,
+    // For historical data: solid fill, for forecast: dashed and muted
+    commercialFill: week.isForecast ? `${COLORS[0]}30` : COLORS[0],
+    commercialStroke: week.isForecast ? COLORS[0] : COLORS[0],
+    commercialStrokeDasharray: week.isForecast ? "5 5" : undefined,
+    commercialFillOpacity: week.isForecast ? 0.3 : 0.8,
+    
+    presaleFill: week.isForecast ? `${COLORS[1]}30` : COLORS[1],
+    presaleStroke: week.isForecast ? COLORS[1] : COLORS[1],
+    presaleStrokeDasharray: week.isForecast ? "5 5" : undefined,
+    presaleFillOpacity: week.isForecast ? 0.3 : 0.8,
+    
+    internalFill: week.isForecast ? `${COLORS[2]}30` : COLORS[2],
+    internalStroke: week.isForecast ? COLORS[2] : COLORS[2],
+    internalStrokeDasharray: week.isForecast ? "5 5" : undefined,
+    internalFillOpacity: week.isForecast ? 0.3 : 0.8,
+  }));
 
   return (
     <div className="space-y-4">
@@ -63,7 +141,7 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
 
       <Card>
         <div className="font-semibold mb-2 flex items-center gap-2">
-          Загрузка по неделям
+          Загрузка по неделям {forecastWeeks > 0 && '(факт + прогноз)'}
           <HintTooltip hintKey="weeklyLoad" />
         </div>
         
@@ -89,12 +167,30 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
             <div className="w-3 h-3 border-2 border-[#45515C]"></div>
             <span className="text-sm">Общая загрузка</span>
           </div>
+          
+          {/* Forecast indicator */}
+          {forecastWeeks > 0 && (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-1 bg-gray-400" style={{ background: 'repeating-linear-gradient(90deg, #666, #666 2px, transparent 2px, transparent 4px)' }}></div>
+                <span className="text-sm text-gray-600">Прогноз</span>
+              </div>
+              
+              {/* Today line indicator */}
+              {todayLine && (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-gray-600"></div>
+                  <span className="text-sm text-gray-600">Сегодня</span>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="h-64">
           <ResponsiveContainer>
             <AreaChart 
-              data={areaSeries}
+              data={chartData}
               margin={{ top: 10, right: 30, left: 20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -116,16 +212,41 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                   style: { textAnchor: 'middle' }
                 }}
               />
+              
+              {/* Today reference line */}
+              {todayLine && (
+                <ReferenceLine 
+                  x={todayLine.x} 
+                  stroke="#666" 
+                  strokeDasharray="3 3"
+                  label={{
+                    value: todayLine.label,
+                    position: 'insideTopRight',
+                    fill: '#666',
+                    fontSize: 12
+                  }}
+                />
+              )}
+              
               <Tooltip 
-                formatter={(value: number, name: string) => [
-                  `${value.toFixed(1)} ч`,
-                  name === 'commercial' ? 'Коммерческие' : 
-                  name === 'presale' ? 'Пресейл' : 
-                  name === 'internal' ? 'Внутренние' :
-                  name === 'capacity' ? 'Capacity (доступно)' :
-                  name === 'demand' ? 'Общая загрузка' : name
-                ]}
-                labelFormatter={(label) => `Неделя: ${label}`}
+                formatter={(value: number, name: string, props: any) => {
+                  const isForecast = props.payload.isForecast;
+                  const forecastSuffix = isForecast ? ' (прогноз)' : '';
+                  
+                  return [
+                    `${value.toFixed(1)} ч${forecastSuffix}`,
+                    name === 'commercial' ? 'Коммерческие' : 
+                    name === 'presale' ? 'Пресейл' : 
+                    name === 'internal' ? 'Внутренние' :
+                    name === 'capacity' ? 'Capacity (доступно)' :
+                    name === 'demand' ? 'Общая загрузка' : name
+                  ];
+                }}
+                labelFormatter={(label, props) => {
+                  const isForecast = props && props[0] && props[0].payload.isForecast;
+                  const forecastSuffix = isForecast ? ' [ПРОГНОЗ]' : '';
+                  return `Неделя: ${label}${forecastSuffix}`;
+                }}
                 contentStyle={{ 
                   backgroundColor: 'white', 
                   border: '1px solid #e5e5e5',
@@ -133,7 +254,8 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                   boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
                 }}
               />
-              {/* Stacked areas для типов проектов */}
+
+              {/* Single set of Areas with conditional styling */}
               <Area 
                 dataKey="commercial" 
                 stackId="1" 
@@ -142,6 +264,9 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                 fill={COLORS[0]} 
                 name="commercial"
                 strokeWidth={2}
+                fillOpacity={0.8}
+                connectNulls
+                dot={{ fill: COLORS[0], strokeWidth: 1, r: 2 }}
               />
               <Area 
                 dataKey="presale" 
@@ -151,6 +276,9 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                 fill={COLORS[1]} 
                 name="presale"
                 strokeWidth={2}
+                fillOpacity={0.8}
+                connectNulls
+                dot={{ fill: COLORS[1], strokeWidth: 1, r: 2 }}
               />
               <Area 
                 dataKey="internal" 
@@ -160,8 +288,12 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                 fill={COLORS[2]} 
                 name="internal"
                 strokeWidth={2}
+                fillOpacity={0.8}
+                connectNulls
+                dot={{ fill: COLORS[2], strokeWidth: 1, r: 2 }}
               />
-              {/* Линия capacity */}
+              
+              {/* Lines */}
               <Area 
                 dataKey="capacity" 
                 type="monotone" 
@@ -170,9 +302,9 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                 name="capacity"
                 strokeWidth={2}
                 strokeDasharray="5 5"
-                dot={{ fill: COLORS[3], strokeWidth: 2 }}
+                dot={{ fill: COLORS[3], strokeWidth: 2, r: 3 }}
+                connectNulls
               />
-              {/* Линия общей загрузки */}
               <Area 
                 dataKey="demand" 
                 type="monotone" 
@@ -180,7 +312,8 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
                 fill="transparent" 
                 name="demand"
                 strokeWidth={3}
-                dot={{ fill: COLORS[4], strokeWidth: 2 }}
+                dot={{ fill: COLORS[4], strokeWidth: 2, r: 3 }}
+                connectNulls
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -190,19 +323,24 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
           <div className="text-center p-2 rounded-lg" style={{ backgroundColor: '#EC694C15', border: '1px solid #EC694C30' }}>
             <div className="font-semibold" style={{ color: '#EC694C' }}>Ср. коммерческие</div>
-            <div>{(areaSeries.reduce((sum, week) => sum + week.commercial, 0) / areaSeries.length).toFixed(1)} ч/нед</div>
+            <div>{(totalCommercial / totalWeeks).toFixed(1)} ч/нед</div>
+            {forecastWeeks > 0 && (
+              <div className="text-xs opacity-60 mt-1">
+                {historicalWeeks} нед факт + {forecastWeeks} нед прогноз
+              </div>
+            )}
           </div>
           <div className="text-center p-2 rounded-lg" style={{ backgroundColor: '#87B1DE15', border: '1px solid #87B1DE30' }}>
             <div className="font-semibold" style={{ color: '#87B1DE' }}>Ср. пресейл</div>
-            <div>{(areaSeries.reduce((sum, week) => sum + week.presale, 0) / areaSeries.length).toFixed(1)} ч/нед</div>
+            <div>{(totalPresale / totalWeeks).toFixed(1)} ч/нед</div>
           </div>
           <div className="text-center p-2 rounded-lg" style={{ backgroundColor: '#53A58E15', border: '1px solid #53A58E30' }}>
             <div className="font-semibold" style={{ color: '#53A58E' }}>Ср. внутренние</div>
-            <div>{(areaSeries.reduce((sum, week) => sum + week.internal, 0) / areaSeries.length).toFixed(1)} ч/нед</div>
+            <div>{(totalInternal / totalWeeks).toFixed(1)} ч/нед</div>
           </div>
           <div className="text-center p-2 rounded-lg" style={{ backgroundColor: '#45515C15', border: '1px solid #45515C30' }}>
             <div className="font-semibold" style={{ color: '#45515C' }}>Ср. загрузка</div>
-            <div>{(areaSeries.reduce((sum, week) => sum + week.loadPct, 0) / areaSeries.length).toFixed(1)}%</div>
+            <div>{(areaSeries.reduce((sum, week) => sum + week.loadPct, 0) / totalWeeks).toFixed(1)}%</div>
           </div>
         </div>
       </Card>

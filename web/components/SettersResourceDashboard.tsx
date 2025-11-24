@@ -11,6 +11,7 @@ import ProjectDetailView from "@/components/ProjectDetailView";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useFilters } from "@/hooks/useFilters";
+
 import { Filters } from "@/lib/dataModel";
 import { fmt } from "@/lib/date";
 
@@ -19,13 +20,18 @@ import { fmt } from "@/lib/date";
 export default function SettersResourceDashboardMock() {
   const { 
     filters, 
+    departments,
+    availableDepartments,
+    projects,
+    availableProjects,
+    projectStatuses,
     isLoading: filtersLoading, 
     updateFilter, 
     applyFilters,
     resetFilters,
-    hasPendingChanges 
+    hasPendingChanges,
+    isLoadingData
   } = useFilters();
-
   const [appliedFilters, setAppliedFilters] = useState<Filters | null>(null);
 
   useEffect(() => {
@@ -40,6 +46,7 @@ export default function SettersResourceDashboardMock() {
   useEffect(() => {
     if (data) {
       console.log('Dashboard data updated:', {
+        data: data,
         users: data.users?.length,
         projects: data.projects?.length,
         timeEntries: data.timeEntries?.length,
@@ -89,7 +96,7 @@ export default function SettersResourceDashboardMock() {
   const showLoadingOverlay = (loading || !data || filtersLoading ) && !error && !isApplyingFilters;
   
   // Show error state when we have an error AND no data (or when refetching after error)
-  const showErrorState = error && (!data || isApplyingFilters);
+  const showErrorState = error && !isApplyingFilters;
 
   const deptAgg = data?.metrics?.deptAgg || [];
   const kpis = data?.metrics?.kpis || { avgLoad: 0, activeUsers: 0, activeProjects: 0, dataQuality: 0 };
@@ -119,12 +126,18 @@ export default function SettersResourceDashboardMock() {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <FilterBar 
-          filters={filters} 
-          onChange={handleFilterChange} 
+          filters={filters}
+          departments={departments}
+          availableDepartments={availableDepartments}
+          projects={projects}
+          availableProjects={availableProjects}
+          projectStatuses={projectStatuses}
+          onChange={handleFilterChange}
           onUpdate={handleUpdateData}
           onReset={handleResetFilters}
           hasPendingChanges={hasPendingChanges}
           isUpdating={isApplyingFilters}
+          isLoadingData={isLoadingData}
         />
         <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
           <h2 className="text-lg font-semibold text-destructive mb-2">Ошибка загрузки данных</h2>
@@ -142,13 +155,19 @@ export default function SettersResourceDashboardMock() {
 
   return (<div className="max-w-7xl mx-auto p-6">
     <FilterBar 
-      filters={filters} 
-      onChange={handleFilterChange} 
-      onUpdate={handleUpdateData}
-      onReset={handleResetFilters}
-      hasPendingChanges={hasPendingChanges}
-      isUpdating={isApplyingFilters}
-    />
+        filters={filters}
+        departments={departments}
+        availableDepartments={availableDepartments}
+        projects={projects}
+        availableProjects={availableProjects}
+        projectStatuses={projectStatuses}
+        onChange={handleFilterChange}
+        onUpdate={handleUpdateData}
+        onReset={handleResetFilters}
+        hasPendingChanges={hasPendingChanges}
+        isUpdating={isApplyingFilters}
+        isLoadingData={isLoadingData}
+      />
     <Tabs tabs={[
       { key:'exec', label:'🏢 Компания' },
       { key:'dept', label:'👥 Отдел' },
