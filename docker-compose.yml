@@ -44,13 +44,13 @@ services:
       - /app/node_modules
       - /app/.next
     user: "root"
-    # networks:
-    #   - nginx-proxy-network
+    networks:
+      - nginx-proxy-network
 
 volumes:
   redis_dashboards_data:
 
-# networks:
-#   nginx-proxy-network:
-#     external: true
-#     name: nginx_network_nginx-proxy-network
+networks:
+  nginx-proxy-network:
+    external: true
+    name: nginx_network_nginx-proxy-network

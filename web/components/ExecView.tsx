@@ -78,7 +78,7 @@ export default function ExecView({ kpis, areaSeries, pieData, composedData, scat
       </Card>
 
       <Card>
-        <DepartmentsTable deptTable={deptTable} COLORS={COLORS}/>
+        <DepartmentsTable deptTable={deptTable}/>
       </Card>
     </div>
   );
