@@ -7,7 +7,7 @@ interface HintTooltipProps {
   position?: 'top' | 'bottom' | 'left' | 'right';
 }
 
-export default function HintTooltip({ hintKey, position = 'top' }: HintTooltipProps) {
+export default function HintTooltip({ hintKey, position = 'bottom' }: HintTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const hint = hints[hintKey];
 

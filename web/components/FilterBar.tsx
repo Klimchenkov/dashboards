@@ -202,7 +202,7 @@ export default function FilterBar({
               variant="outline" 
               onClick={onReset} 
               disabled={isUpdating}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="border-2 border-gray-400 text-gray-800 bg-white hover:bg-gray-50 hover:border-gray-500 shadow-sm font-medium px-4 py-2 rounded-md transition-colors"
             >
               Сбросить
             </Button>
