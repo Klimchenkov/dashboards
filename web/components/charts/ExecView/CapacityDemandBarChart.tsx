@@ -10,7 +10,7 @@ import {
   Legend,
   ReferenceLine
 } from "recharts";
-import HintTooltip from "../HintTooltip";
+import HintTooltip from "../../HintTooltip";
 
 const COLORS = {
   capacity: "#87B1DE",  // Blue for capacity

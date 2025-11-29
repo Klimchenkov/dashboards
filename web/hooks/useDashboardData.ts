@@ -17,6 +17,7 @@ interface DashboardData {
     departments: number;
     timeEntries: number;
     plans: number;
+    period: number;
   };
 }
 

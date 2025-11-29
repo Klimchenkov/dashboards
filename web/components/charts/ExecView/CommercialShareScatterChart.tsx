@@ -12,7 +12,7 @@ import {
   ReferenceArea,
   Legend
 } from "recharts";
-import HintTooltip from "../HintTooltip";
+import HintTooltip from "../../HintTooltip";
 
 const COLORS = {
   optimal: "#53A58E",      // Green - optimal quadrant

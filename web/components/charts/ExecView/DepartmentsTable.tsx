@@ -1,8 +1,9 @@
+// /var/www/klimchenkovdev/dashboards/web/components/charts/ExecView/DepartmentsTable.tsx
 'use client';
 import { Button } from "@/components/ui";
 import { exportToXLSX } from "@/lib/xlsxExport";
 import { DeptAggregates } from "@/lib/dataModel";
-import HintTooltip from "../HintTooltip";
+import HintTooltip from "../../HintTooltip";
 
 interface DepartmentsTableProps {
   deptTable: DeptAggregates[];

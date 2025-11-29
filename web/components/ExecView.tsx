@@ -2,11 +2,11 @@
 import { Card } from "./ui";
 import { DeptAggregates } from "@/lib/dataModel";
 import HintTooltip from "./HintTooltip"; 
-import WeeklyLoadChart from "./charts/WeeklyLoadChart";
-import HoursDistributionPieChart from "./charts/HoursDistributionPieChart";
-import CapacityDemandBarChart from "./charts/CapacityDemandBarChart";
-import CommercialShareScatterChart from "./charts/CommercialShareScatterChart";
-import DepartmentsTable from "./charts/DepartmentsTable";
+import WeeklyLoadChart from "./charts/ExecView/WeeklyLoadChart";
+import HoursDistributionPieChart from "./charts/ExecView/HoursDistributionPieChart";
+import CapacityDemandBarChart from "./charts/ExecView/CapacityDemandBarChart";
+import CommercialShareScatterChart from "./charts/ExecView/CommercialShareScatterChart";
+import DepartmentsTable from "./charts/ExecView/DepartmentsTable";
 
 export default function ExecView({ kpis, areaSeries, pieData, composedData, scatterData, deptTable } : {
   kpis: {avgLoad: number; activeUsers: number; activeProjects: number; dataQuality: number};

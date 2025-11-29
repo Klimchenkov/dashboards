@@ -5,6 +5,8 @@ import { startOfPeriod, endOfPeriod, fmt } from '@/lib/date';
 import { Filters, User, Project, Department, TimeEntry, Plan, VacationType, ProductionCalendarDay, ExtendedFilters } from '@/lib/dataModel';
 import { computeMetrics } from '@/lib/dashboardMetrics';
 import { addMonths } from "date-fns";
+import { WhatIfManager } from '@/lib/whatIfUtils';
+import { getUserIdFromRequest } from '@/lib/authUtils';
 
 import logger from '@/lib/logger';
 
@@ -869,6 +871,34 @@ export async function POST(request: NextRequest) {
       redisEnabled: !!redis
     });
 
+    // Получаем гипотетические данные для пользователя
+    let hypotheticalUsers = [];
+    let hypotheticalProjects = [];
+    
+    try {
+      const userId = await getUserIdFromRequest(request);
+      if (userId) {
+        const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
+        hypotheticalUsers = whatIfData.scenarios
+          .filter(s => s.is_active)
+          .flatMap(s => s.users);
+        hypotheticalProjects = whatIfData.scenarios
+          .filter(s => s.is_active)
+          .flatMap(s => s.projects);
+          
+        logger.info('Loaded hypothetical data', {
+          requestId,
+          hypotheticalUsers: hypotheticalUsers.length,
+          hypotheticalProjects: hypotheticalProjects.length
+        });
+      }
+    } catch (error) {
+      logger.warn('Error loading hypothetical data, continuing without it', {
+        requestId,
+        error: error.message
+      });
+    }
+
     // Execute the sequential data fetching pipeline with user restrictions
     const {
       users,
@@ -880,7 +910,17 @@ export async function POST(request: NextRequest) {
       productionCalendarSize
     } = await fetchAllDataSequentially(filters, periodStart, periodEnd, userRestrictions);
 
+    // const allUsers = WhatIfManager.mergeUsers(users, hypotheticalUsers);
+    // const allProjects = WhatIfManager.mergeProjects(projects, hypotheticalProjects);
+    // const allDepartments = WhatIfManager.mergeDepartmentsWithHypotheticalUsers(
+    //   departments, 
+    //   hypotheticalUsers
+    // );
+
     const responseTime = Date.now() - startTime;
+    const startDate = new Date(periodStart)
+    const endDate = new Date(periodEnd)
+    const daysInFilterPeriod =  ((endDate - startDate) / (1000 * 60 * 60 * 24))
     
     const responseData = {
       users,
@@ -900,7 +940,8 @@ export async function POST(request: NextRequest) {
         projects: projects.length,
         departments: departments.length,
         timeEntries: timeEntries.length,
-        plans: plans.length
+        plans: plans.length,
+        period: daysInFilterPeriod
       }
     };
 

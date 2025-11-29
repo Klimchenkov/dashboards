@@ -5,10 +5,12 @@ import { Tabs, Card } from "@/components/ui";
 import FilterBar from "@/components/FilterBar";
 import ExecView from "@/components/ExecView";
 import DeptView from "@/components/DeptView";
-import AlertCenter from "@/components/AlertCenter";
-import ForecastView from "@/components/ForecastView";
+import { AlertCenter } from "@/components/alerts/AlertCenter";
+import PersonView from "@/components/PersonView";
 import ProjectDetailView from "@/components/ProjectDetailView";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
+import { WhatIfPanel } from "@/components/what-if/WhatIfPanel";
+
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useFilters } from "@/hooks/useFilters";
 
@@ -55,7 +57,7 @@ export default function SettersResourceDashboardMock() {
     }
   }, [data]);
   
-  const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'>('exec');
+  const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'|'alerts'>('exec');
   const [forecastHorizon] = useState<1|2|3>(3);
   const [selectedProject, setSelectedProject] = useState<number | null>(1);
   const [isApplyingFilters, setIsApplyingFilters] = useState(false);
@@ -104,17 +106,10 @@ export default function SettersResourceDashboardMock() {
   const pieData = data?.metrics?.pieData || [];
   const composedData = data?.metrics?.composedData || [];
   const scatterData = data?.metrics?.scatterData || [];
-
-
-  const alerts = useMemo(()=> [{ type:'overload', severity:3, entity:'dept', refId:0, message:'Перегруз > 120% 3+ нед', from:'W2', to:'W5' } as any], []);
-
-    // Dept view mock
-  const members = data?.users.slice(0, 12) || [];
-  const stacked = members.map(m => ({ name:m.name, commercial: Math.random()*40, presale: Math.random()*12, internal: Math.random()*10 }));
-  const table = stacked.map(s => { const capacity=160; const demand=s.commercial+s.presale; const forecast=demand+s.internal; const load=(demand/capacity)*100; const status=load<70?'under':(load>110?'over':'ok'); return { name:s.name, loadPct:load, capacity, demand, forecast, status }; });
+  const period = data?.dataSummary?.period;
+   
   const thirty = Array.from({length:30}).map((_,i)=> ({ date: fmt(new Date(Date.now()-(29-i)*86400000)), value: Math.random()*8 }));
-  const deptAlerts = [{message:"Перегруз > 120% 3+ нед"}, {message:"Пустые дни без факта"}];
-  const deptQuality = 0.78;
+
   
   // Show loading overlay while data is being fetched
   if ( showLoadingOverlay )  {
@@ -170,21 +165,28 @@ export default function SettersResourceDashboardMock() {
       />
     <Tabs tabs={[
       { key:'exec', label:'🏢 Компания' },
-      { key:'dept', label:'👥 Отдел' },
-      { key:'forecast', label:'📊 Прогноз' },
+      { key:'dept', label:'📊 Отдел' },
+      { key:'forecast', label:'👥 Сотрудники' },
       { key:'project', label:'📂 Проект' },
+      { key:'alerts', label:'🚨 Алерты' },
+      { key:'whatif', label:'🧪 What-If' },
     ]} active={tab} onChange={(k)=>setTab(k as any)} />
 
     <div className="mt-4" />
 
     {tab==='exec' && <ExecView kpis={kpis} areaSeries={areaSeries} pieData={pieData} composedData={composedData} scatterData={scatterData} deptTable={deptAgg} />}
-    {tab==='dept' && <DeptView stacked={stacked} table={table} heatmap={thirty} alerts={deptAlerts} quality={deptQuality} />}
-    {tab==='forecast' && <ForecastView horizon={forecastHorizon} />}
+    {tab==='dept' && <DeptView deptAgg={deptAgg} period={period} />}
+    {tab==='person' && <PersonView deptAgg={deptAgg} period={period}  />}
     {tab==='project' && <ProjectDetailView projectId={selectedProject} />}
+    {tab==='alerts' && <AlertCenter />}
+    {tab==='whatif' && <WhatIfPanel departments={data?.departments || []} />}
 
     <div className="mt-6 grid md:grid-cols-3 gap-4">
-      <AlertCenter alerts={alerts as any} />
-      <Card><div className="font-semibold">What-if панель</div><div className="text-sm opacity-70">Симуляции (placeholder)</div></Card>
+      <AlertCenter compact maxAlerts={5} />
+      <WhatIfPanel 
+        departments={data?.departments || []} 
+        compact 
+      />      
       <Card><div className="font-semibold">Инфо</div><div className="text-sm"><a className="underline" href="/how-it-works">Как посчитано</a></div><div className="text-xs opacity-60 mt-1">Mock-дашборд SETTERS: роли, прогноз, аномалии, экспорт, интеграции.</div></Card>
     </div>
 
