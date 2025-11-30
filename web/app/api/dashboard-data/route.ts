@@ -7,6 +7,9 @@ import { computeMetrics } from '@/lib/dashboardMetrics';
 import { addMonths } from "date-fns";
 import { WhatIfManager } from '@/lib/whatIfUtils';
 import { getUserIdFromRequest } from '@/lib/authUtils';
+import { AlertGenerator } from '@/lib/alertUtils';
+import { getResolvedAlerts } from '@/lib/alertStorage';
+import { generateCacheKey } from '@/lib/cache';
 
 import logger from '@/lib/logger';
 
@@ -131,10 +134,6 @@ async function invalidateCache(patterns: string[]): Promise<void> {
   }
 }
 
-function generateCacheKey(prefix: string, filters: ExtendedFilters, additional?: string): string {
-  const baseKey = `${prefix}_${filters.period}_${filters.horizonMonths}_${filters.selectedDepartments.join(',')}_${filters.excludedDepartments.join(',')}_${filters.selectedProjects.join(',')}_${filters.excludedProjects.join(',')}_${filters.excludedProjectStatuses.join(',')}`;
-  return additional ? `${baseKey}_${additional}` : baseKey;
-}
 
 // Helper to fetch production calendar with proper error handling
 async function fetchProductionCalendar(
@@ -245,6 +244,7 @@ async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_ac
           telegram_id: user.telegram_id,
           telegram_name: user.telegram_name,
           full_access: user.full_access,
+          departments: user.user_departments,
           vacations: (user.user_vacations || []).map((vacation: any) => ({
             ...vacation,
             vacation_type: vacation.vacation_type as VacationType
@@ -910,6 +910,70 @@ export async function POST(request: NextRequest) {
       productionCalendarSize
     } = await fetchAllDataSequentially(filters, periodStart, periodEnd, userRestrictions);
 
+    logger.info('Step 5: Generating alerts', { requestId });
+
+    let alerts: Alert[] = [];
+    const alertsCacheKey = `alerts:${generateCacheKey('', filters, `${periodStart}_${periodEnd}`)}`;
+    try {
+      // Проверяем кэш алертов
+      if (redis) {
+        const cachedAlerts = await redis.get(alertsCacheKey);
+        if (cachedAlerts) {
+          alerts = JSON.parse(cachedAlerts);
+          logger.info('Alerts loaded from cache', { 
+            requestId, 
+            alertsCount: alerts.length,
+            cacheKey: alertsCacheKey 
+          });
+        }
+      }
+
+      // Если алертов нет в кэше - генерируем
+      if (alerts.length === 0) {
+        logger.info('Generating fresh alerts', { requestId });
+        
+        alerts = AlertGenerator.generateAlerts(
+          users,
+          departments,
+          projects,
+          timeEntries,
+          metrics,
+          periodStart,
+          periodEnd,
+          filters.horizonMonth
+        );
+
+        // Сохраняем в Redis на 24 часа
+        if (redis && alerts.length > 0) {
+          await redis.setex(alertsCacheKey, 24 * 60 * 60, JSON.stringify(alerts));
+          logger.info('Alerts cached in Redis', { 
+            requestId, 
+            alertsCount: alerts.length,
+            ttl: '24 hours'
+          });
+        }
+      }
+
+      // Получаем решенные алерты для фильтрации
+      const resolvedAlerts = await getResolvedAlerts();
+      const activeAlerts = alerts.filter(alert => !resolvedAlerts.has(alert.id));
+
+      logger.info('Alerts processing completed', {
+        requestId,
+        totalAlerts: alerts.length,
+        resolvedAlerts: resolvedAlerts.size,
+        activeAlerts: activeAlerts.length
+      });
+
+    } catch (error) {
+      logger.error('Error generating alerts:', { 
+        requestId, 
+        error: error.message,
+        stack: error.stack 
+      });
+      // Продолжаем без алертов, чтобы не ломать весь дашборд
+      alerts = [];
+    }
     // const allUsers = WhatIfManager.mergeUsers(users, hypotheticalUsers);
     // const allProjects = WhatIfManager.mergeProjects(projects, hypotheticalProjects);
     // const allDepartments = WhatIfManager.mergeDepartmentsWithHypotheticalUsers(
@@ -929,6 +993,7 @@ export async function POST(request: NextRequest) {
       timeEntries,
       plans,
       metrics,
+      alerts,
       timestamp: new Date().toISOString(),
       cacheStatus: 'success',
       redisEnabled: !!redis,
@@ -941,7 +1006,9 @@ export async function POST(request: NextRequest) {
         departments: departments.length,
         timeEntries: timeEntries.length,
         plans: plans.length,
-        period: daysInFilterPeriod
+        period: daysInFilterPeriod,
+        alerts: alerts.length,
+        alerts_cache_key: alertsCacheKey
       }
     };
 

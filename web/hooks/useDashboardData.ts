@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Filters, User, Project, Department, TimeEntry, Plan, DashboardMetrics, ExtendedFilters } from '@/lib/dataModel';
 
+
 interface DashboardData {
   users: User[];
   projects: Project[];
@@ -18,6 +19,7 @@ interface DashboardData {
     timeEntries: number;
     plans: number;
     period: number;
+    alerts_cache_key: string;
   };
 }
 

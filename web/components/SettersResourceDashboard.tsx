@@ -56,7 +56,7 @@ export default function SettersResourceDashboardMock() {
       });
     }
   }, [data]);
-  
+
   const [tab, setTab] = useState<'exec'|'dept'|'forecast'|'project'|'alerts'>('exec');
   const [forecastHorizon] = useState<1|2|3>(3);
   const [selectedProject, setSelectedProject] = useState<number | null>(1);
@@ -107,8 +107,7 @@ export default function SettersResourceDashboardMock() {
   const composedData = data?.metrics?.composedData || [];
   const scatterData = data?.metrics?.scatterData || [];
   const period = data?.dataSummary?.period;
-   
-  const thirty = Array.from({length:30}).map((_,i)=> ({ date: fmt(new Date(Date.now()-(29-i)*86400000)), value: Math.random()*8 }));
+  const alerts_cache_key = data?.dataSummary?.alerts_cache_key || ``;
 
   
   // Show loading overlay while data is being fetched
@@ -166,7 +165,7 @@ export default function SettersResourceDashboardMock() {
     <Tabs tabs={[
       { key:'exec', label:'🏢 Компания' },
       { key:'dept', label:'📊 Отдел' },
-      { key:'forecast', label:'👥 Сотрудники' },
+      { key:'person', label:'👥 Сотрудники' },
       { key:'project', label:'📂 Проект' },
       { key:'alerts', label:'🚨 Алерты' },
       { key:'whatif', label:'🧪 What-If' },
@@ -176,13 +175,13 @@ export default function SettersResourceDashboardMock() {
 
     {tab==='exec' && <ExecView kpis={kpis} areaSeries={areaSeries} pieData={pieData} composedData={composedData} scatterData={scatterData} deptTable={deptAgg} />}
     {tab==='dept' && <DeptView deptAgg={deptAgg} period={period} />}
-    {tab==='person' && <PersonView deptAgg={deptAgg} period={period}  />}
-    {tab==='project' && <ProjectDetailView projectId={selectedProject} />}
-    {tab==='alerts' && <AlertCenter />}
+    {tab==='person' && <PersonView deptAgg={deptAgg} projects={data?.projects} horizonMonth={filters.horizonMonth}/>}
+    {tab==='project' && <ProjectDetailView projects={data?.projects} users={data?.users} timeEntries={data?.timeEntries}/>}
+    {tab==='alerts' && <AlertCenter alerts_cache_key={alerts_cache_key} />}
     {tab==='whatif' && <WhatIfPanel departments={data?.departments || []} />}
 
     <div className="mt-6 grid md:grid-cols-3 gap-4">
-      <AlertCenter compact maxAlerts={5} />
+      <AlertCenter compact maxAlerts={5} alerts_cache_key={alerts_cache_key}  />
       <WhatIfPanel 
         departments={data?.departments || []} 
         compact 

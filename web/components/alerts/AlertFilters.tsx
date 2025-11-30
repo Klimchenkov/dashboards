@@ -25,6 +25,20 @@ export function AlertFilters({ filters, onFiltersChange, stats }: AlertFiltersPr
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium mb-1">Источник</label>
+          <select
+            value={filters.source || 'all'}
+            onChange={(e) => onFiltersChange({ source: e.target.value as any })}
+            className="w-full p-2 border rounded-md text-sm"
+          >
+            <option value="all">Все источники</option>
+            <option value="person">Сотрудники ({stats.bySource.person})</option>
+            <option value="project">Проекты ({stats.bySource.project})</option>
+            <option value="system">Система ({stats.bySource.system})</option>
+          </select>
+        </div>
+
         {/* Серьезность */}
         <div>
           <label className="block text-sm font-medium mb-1">Серьезность</label>

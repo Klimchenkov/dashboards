@@ -44,6 +44,18 @@ export function AlertStats({ stats, compact = false }: AlertStatsProps) {
           <div className="text-sm text-muted-foreground">Инфо</div>
         </div>
         <div className="text-center">
+        <div className="text-2xl font-bold text-primary">{stats.bySource.person}</div>
+        <div className="text-sm text-muted-foreground">Сотрудники</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-primary">{stats.bySource.project}</div>
+            <div className="text-sm text-muted-foreground">Проекты</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-primary">{stats.bySource.system}</div>
+            <div className="text-sm text-muted-foreground">Система</div>
+        </div>
+        <div className="text-center">
           <div className="text-2xl font-bold text-primary">{stats.byCategory.load}</div>
           <div className="text-sm text-muted-foreground">Загрузка</div>
         </div>

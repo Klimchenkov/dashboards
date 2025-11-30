@@ -1,13 +1,17 @@
 import { Alert } from '@/lib/alertTypes';
 import { Card } from '@/components/ui';
+import { useState } from 'react';
 
 interface AlertDetailsProps {
   alert: Alert;
-  onMarkResolved: (alertId: string) => void;
+  onMarkResolved: (alertId: string) => Promise<boolean>;
+  onMarkUnresolved?: (alertId: string) => Promise<boolean>;
   onClose: () => void;
 }
 
-export function AlertDetails({ alert, onMarkResolved, onClose }: AlertDetailsProps) {
+export function AlertDetails({ alert, onMarkResolved, onMarkUnresolved, onClose }: AlertDetailsProps) {
+  const [isResolving, setIsResolving] = useState(false);
+
   const getSeverityText = (severity: Alert['severity']) => {
     switch (severity) {
       case 'critical': return 'Критический';
@@ -25,7 +29,19 @@ export function AlertDetails({ alert, onMarkResolved, onClose }: AlertDetailsPro
       case 'norms': return 'Нормы';
       case 'strategy': return 'Стратегия';
       case 'sales': return 'Продажи';
+      case 'vacation': return 'Отпуск';
+      case 'forecast': return 'Прогноз';
       default: return 'Другое';
+    }
+  };
+
+  const handleResolve = async () => {
+    setIsResolving(true);
+    const success = await onMarkResolved(alert.id);
+    setIsResolving(false);
+    
+    if (success) {
+      onClose();
     }
   };
 
@@ -102,26 +118,27 @@ export function AlertDetails({ alert, onMarkResolved, onClose }: AlertDetailsPro
               {new Date(alert.createdAt).toLocaleString('ru-RU')}
             </span>
           </div>
+
+          {alert.source && (
+            <div className="col-span-2">
+              <span className="font-medium">Источник:</span>
+              <span className="ml-2 capitalize">{alert.source}</span>
+            </div>
+          )}
         </div>
 
-        {!alert.resolved && (
-          <div className="pt-4 border-t">
-            <button
-              onClick={() => onMarkResolved(alert.id)}
-              className="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors"
-            >
-              Отметить как решенный
-            </button>
-          </div>
-        )}
-
-        {alert.resolved && (
-          <div className="pt-4 border-t">
-            <div className="bg-green-50 text-green-700 p-3 rounded-md text-sm">
-              ✅ Алерт был решен {alert.resolvedAt && new Date(alert.resolvedAt).toLocaleString('ru-RU')}
-            </div>
-          </div>
-        )}
+        <div className="pt-4 border-t">
+          <button
+            onClick={handleResolve}
+            disabled={isResolving}
+            className="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isResolving ? 'Отмечаем...' : 'Отметить как решенный (24ч)'}
+          </button>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            Алерт будет скрыт на 24 часа, затем появится снова если проблема не решена
+          </p>
+        </div>
       </div>
     </Card>
   );

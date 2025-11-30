@@ -59,13 +59,17 @@ export function AlertList({
             {alert.period && <span>{alert.period}</span>}
           </div>
         </div>
-        {!compact && onMarkResolved && !alert.resolved && (
+       {!compact && onMarkResolved && (
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              onMarkResolved(alert.id);
+              const success = await onMarkResolved(alert.id);
+              if (success) {
+                // Успешно отмечено как решенное
+                console.log(`Alert ${alert.id} marked as resolved`);
+              }
             }}
-            className="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+            className="ml-2 px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
           >
             Решить
           </button>
