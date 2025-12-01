@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatIfManager } from '@/lib/whatIfUtils';
-import { getUserIdFromRequest } from '@/lib/authUtils';
+
+// Helper to get user ID from request (same as above)
+async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
+  const userId = request.headers.get('x-user-id');
+  if (userId) return userId;
+
+  const { searchParams } = new URL(request.url);
+  const queryUserId = searchParams.get('userId');
+  if (queryUserId) return queryUserId;
+
+  try {
+    if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
+      const body = await request.clone().json();
+      return body.userId || body.user_id || null;
+    }
+  } catch (error) {
+    // Ignore body parsing errors
+  }
+
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
@@ -24,7 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -58,7 +78,7 @@ export async function PUT(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -93,7 +113,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -106,7 +126,7 @@ export async function DELETE(request: NextRequest) {
     const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
     whatIfData.scenarios = whatIfData.scenarios.filter(s => s.id !== id);
     
-    // Если удаляем активный сценарий, сбрасываем активный ID
+    // If deleting active scenario, reset active ID
     if (whatIfData.active_scenario_id === id) {
       whatIfData.active_scenario_id = undefined;
     }
@@ -127,7 +147,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -135,7 +155,7 @@ export async function PATCH(request: NextRequest) {
 
     const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
     
-    // Деактивируем все сценарии
+    // Deactivate all scenarios
     whatIfData.scenarios.forEach(scenario => {
       scenario.is_active = scenario.id === scenarioId;
     });

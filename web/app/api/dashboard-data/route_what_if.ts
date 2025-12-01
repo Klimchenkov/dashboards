@@ -6,10 +6,10 @@ import { Filters, User, Project, Department, TimeEntry, Plan, VacationType, Prod
 import { computeMetrics } from '@/lib/dashboardMetrics';
 import { addMonths } from "date-fns";
 import { WhatIfManager } from '@/lib/whatIfUtils';
-import { getUserIdFromRequest } from '@/lib/authUtils';
 import { AlertGenerator } from '@/lib/alertUtils';
 import { getResolvedAlerts } from '@/lib/alertStorage';
 import { generateCacheKey } from '@/lib/cache';
+import { getUserIdFromRequest } from '@/lib/authUtils'
 
 import logger from '@/lib/logger';
 
@@ -173,8 +173,8 @@ async function fetchProductionCalendar(
 }
 
 // Data fetching functions with proper error handling in Russian
-async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }): Promise<{users: User[], userIds: number[]}> {
-  const cacheKey = generateCacheKey('users', filters);
+async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }, hypotheticalUsers: any[] = []): Promise<{users: User[], userIds: number[]}> {
+  const cacheKey = generateCacheKey(`users`, filters);
   const result = await cacheGet(
     cacheKey,
     async () => {
@@ -285,10 +285,51 @@ async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_ac
         }
       }
 
-      const userIds = users.map(user => user.id);
+      // === IMPORTANT: MERGE WHAT-IF USERS HERE ===
+      // Convert hypothetical users to the same structure as real users
+      const formattedHypotheticalUsers = hypotheticalUsers.map(hypUser => {
+        // Convert hypothetical user to match real user structure
+        const user: User = {
+          id: parseInt(hypUser.id.replace('hypothetical_', '')) || Math.floor(Math.random() * 1000000) + 1000000, // Generate unique ID
+          name: hypUser.name,
+          created_at: hypUser.created_at,
+          isActive: hypUser.isActive,
+          telegram_id: hypUser.telegram_id,
+          telegram_name: hypUser.telegram_name,
+          full_access: hypUser.full_access,
+          departments: hypUser.department_id ? [{
+            department_id: hypUser.department_id,
+            departments: {
+              id: hypUser.department_id,
+              name: 'Hypothetical Department' // This will be replaced by actual department name in departments fetch
+            }
+          }] : [],
+          vacations: hypUser.vacations || [],
+          norm: hypUser.norm ? {
+            id: hypUser.norm.id,
+            user_id: parseInt(hypUser.id.replace('hypothetical_', '')) || Math.floor(Math.random() * 1000000) + 1000000,
+            valid_from: hypUser.norm.valid_from,
+            valid_to: hypUser.norm.valid_to,
+            created_at: hypUser.norm.created_at,
+            working_days: hypUser.norm.working_days,
+            hours_presale: hypUser.norm.hours_presale,
+            hours_internal: hypUser.norm.hours_internal,
+            hours_commercial: hypUser.norm.hours_commercial,
+            works_on_holidays: hypUser.norm.works_on_holidays
+          } : null,
+          plans: hypUser.plans || [],
+          time_entries: hypUser.time_entries || []
+        };
+        return user;
+      });
+      // Merge real and hypothetical users
+      const allUsers = [...users, ...formattedHypotheticalUsers];
+      const userIds = allUsers.map(user => user.id);
 
-      logger.info('Users fetched with filters', { 
-        count: users.length,
+      logger.info('Users fetched with filters and hypothetical users', { 
+        count: allUsers.length,
+        realUsers: users.length,
+        hypotheticalUsers: formattedHypotheticalUsers.length,
         userIdsCount: userIds.length,
         userRestrictions: userRestrictions ? {
           full_access: userRestrictions.full_access,
@@ -300,7 +341,7 @@ async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_ac
         }
       });
 
-      return { users, userIds };
+      return { users: allUsers, userIds };
     },
     { 
       ttl: CACHE_CONFIG.LONG_TTL,
@@ -315,7 +356,7 @@ async function fetchUsers(filters: ExtendedFilters, userRestrictions?: { full_ac
   return result.data;
 }
 
-async function fetchProjects(filters: ExtendedFilters, userIds: number[], userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }): Promise<Project[]> {
+async function fetchProjects(filters: ExtendedFilters, userIds: number[], userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }, hypotheticalProjects: any[] = []): Promise<Project[]> {
   const cacheKey = generateCacheKey('projects', filters);
   const result = await cacheGet(
     cacheKey,
@@ -395,8 +436,19 @@ async function fetchProjects(filters: ExtendedFilters, userIds: number[], userRe
         };
       });
 
-      logger.info('Projects fetched with filters', { 
-        count: projects.length,
+      // Merge hypothetical projects
+      const allProjects = [...projects, ...hypotheticalProjects.map(proj => ({
+        ...proj,
+        id: parseInt(proj.id.replace('hypothetical_', '')) || Math.floor(Math.random() * 1000000) + 1000000,
+        name: proj.project_name,
+        isActive: proj.isActive,
+        plans: proj.plans || []
+      }))];
+
+      logger.info('Projects fetched with hypothetical projects', { 
+        count: allProjects.length,
+        realProjects: projects.length,
+        hypotheticalProjects: hypotheticalProjects.length,
         userRestrictions: userRestrictions ? {
           full_access: userRestrictions.full_access,
           lead_projects_count: userRestrictions.lead_projects.length
@@ -408,7 +460,7 @@ async function fetchProjects(filters: ExtendedFilters, userIds: number[], userRe
           excludedProjectStatuses: filters.excludedProjectStatuses?.length || 0
         }
       });
-      return projects;
+      return allProjects;
     },
     { 
       ttl: CACHE_CONFIG.LONG_TTL,
@@ -423,7 +475,7 @@ async function fetchProjects(filters: ExtendedFilters, userIds: number[], userRe
   return result.data;
 }
 
-async function fetchDepartments(filters: ExtendedFilters, userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }): Promise<Department[]> {
+async function fetchDepartments(filters: ExtendedFilters, userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }, hypotheticalUsers: any[] = []): Promise<Department[]> {
   const cacheKey = generateCacheKey('departments', filters);
   const result = await cacheGet(
     cacheKey,
@@ -480,7 +532,7 @@ async function fetchDepartments(filters: ExtendedFilters, userRestrictions?: { f
         throw new Error('Не удалось загрузить данные отделов');
       }
 
-      const departments = data.map((department: any) => ({
+      let departments = data.map((department: any) => ({
         id: department.id,
         name: department.name,
         lead_tg_id: department.lead_tg_id,
@@ -530,8 +582,56 @@ async function fetchDepartments(filters: ExtendedFilters, userRestrictions?: { f
         }).filter(Boolean) || [] 
       }));
 
-      logger.info('Departments fetched with filters', { 
+      // === IMPORTANT: ADD WHAT-IF USERS TO THEIR DEPARTMENTS ===
+      if (hypotheticalUsers.length > 0) {
+        hypotheticalUsers.forEach(hypUser => {
+          if (hypUser.department_id) {
+            // Find the department for this hypothetical user
+            const department = departments.find(dept => dept.id === hypUser.department_id);
+            if (department) {
+              // Convert hypothetical user to department user format
+              const departmentUser = {
+                id: parseInt(hypUser.id.replace('hypothetical_', '')) || Math.floor(Math.random() * 1000000) + 1000000,
+                name: hypUser.name,
+                created_at: hypUser.created_at,
+                isActive: hypUser.isActive,
+                vacations: hypUser.vacations || [],
+                norm: hypUser.norm ? {
+                  id: hypUser.norm.id,
+                  user_id: parseInt(hypUser.id.replace('hypothetical_', '')) || Math.floor(Math.random() * 1000000) + 1000000,
+                  valid_from: hypUser.norm.valid_from,
+                  valid_to: hypUser.norm.valid_to,
+                  created_at: hypUser.norm.created_at,
+                  working_days: hypUser.norm.working_days,
+                  hours_presale: hypUser.norm.hours_presale,
+                  hours_internal: hypUser.norm.hours_internal,
+                  hours_commercial: hypUser.norm.hours_commercial,
+                  works_on_holidays: hypUser.norm.works_on_holidays
+                } : null,
+                plans: hypUser.plans || [],
+                time_entries: hypUser.time_entries || []
+              };
+
+              // Add the hypothetical user to the department
+              department.users.push(departmentUser);
+              logger.debug('Added hypothetical user to department', {
+                departmentId: department.id,
+                departmentName: department.name,
+                userName: hypUser.name
+              });
+            } else {
+              logger.warn('Hypothetical user department not found', {
+                departmentId: hypUser.department_id,
+                userName: hypUser.name
+              });
+            }
+          }
+        });
+      }
+
+      logger.info('Departments fetched with filters and hypothetical users', { 
         count: departments.length,
+        hypotheticalUsersAdded: hypotheticalUsers.filter(u => u.department_id).length,
         userRestrictions: userRestrictions ? {
           full_access: userRestrictions.full_access,
           lead_departments_count: userRestrictions.lead_departments.length
@@ -718,16 +818,28 @@ async function fetchPlans(filters: ExtendedFilters, userIds: number[], userRestr
 }
 
 // Sequential data fetching with proper error handling
-async function fetchAllDataSequentially(filters: ExtendedFilters, periodStart: string, periodEnd: string, userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] }) {
+async function fetchAllDataSequentially(
+  filters: ExtendedFilters, 
+  periodStart: string, 
+  periodEnd: string, 
+  userRestrictions?: { full_access: boolean; lead_departments: number[]; lead_projects: number[] },
+  hypotheticalUsers: any[] = [],
+  hypotheticalProjects: any[] = []
+) {
   const requestId = Math.random().toString(36).substring(7);
-  logger.info('Starting sequential data fetching', { requestId, userRestrictions });
+  logger.info('Starting sequential data fetching', { 
+    requestId, 
+    userRestrictions,
+    hypotheticalUsersCount: hypotheticalUsers.length,
+    hypotheticalProjectsCount: hypotheticalProjects.length
+  });
   
   // Step 1: Fetch users first to get the user IDs for filtering other data
   logger.info('Step 1: Fetching users', { requestId });
   let usersResult: {users: User[], userIds: number[]};
   
   try {
-    usersResult = await fetchUsers(filters, userRestrictions);
+    usersResult = await fetchUsers(filters, userRestrictions, hypotheticalUsers);
     logger.info('Users fetched successfully', { 
       requestId, 
       usersCount: usersResult.users.length,
@@ -744,8 +856,8 @@ async function fetchAllDataSequentially(filters: ExtendedFilters, periodStart: s
   
   try {
     [projectsResult, departmentsResult, timeEntriesResult, plansResult] = await Promise.all([
-      fetchProjects(filters, usersResult.userIds, userRestrictions),
-      fetchDepartments(filters, userRestrictions),
+      fetchProjects(filters, usersResult.userIds, userRestrictions, hypotheticalProjects),
+      fetchDepartments(filters, userRestrictions, hypotheticalUsers),
       fetchTimeEntries(filters, periodStart, periodEnd, usersResult.userIds, userRestrictions),
       fetchPlans(filters, usersResult.userIds, userRestrictions),
     ]);
@@ -870,14 +982,15 @@ export async function POST(request: NextRequest) {
       userRestrictions,
       redisEnabled: !!redis
     });
-
-    // Получаем гипотетические данные для пользователя
+    
+    // Get user ID from request for What-If data
+    const userId = await getUserIdFromRequest(request, body);
+  
     let hypotheticalUsers = [];
     let hypotheticalProjects = [];
     
-    try {
-      const userId = await getUserIdFromRequest(request);
-      if (userId) {
+    if (userId) {
+      try {
         const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
         hypotheticalUsers = whatIfData.scenarios
           .filter(s => s.is_active)
@@ -890,15 +1003,15 @@ export async function POST(request: NextRequest) {
           hypotheticalUsers: hypotheticalUsers.length,
           hypotheticalProjects: hypotheticalProjects.length
         });
+      } catch (error) {
+        logger.warn('Error loading hypothetical data, continuing without it', {
+          requestId,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
-    } catch (error) {
-      logger.warn('Error loading hypothetical data, continuing without it', {
-        requestId,
-        error: error.message
-      });
     }
 
-    // Execute the sequential data fetching pipeline with user restrictions
+    // Execute the sequential data fetching pipeline with user restrictions AND hypothetical data
     const {
       users,
       projects, 
@@ -907,7 +1020,7 @@ export async function POST(request: NextRequest) {
       plans,
       metrics,
       productionCalendarSize
-    } = await fetchAllDataSequentially(filters, periodStart, periodEnd, userRestrictions);
+    } = await fetchAllDataSequentially(filters, periodStart, periodEnd, userRestrictions, hypotheticalUsers, hypotheticalProjects);
 
     logger.info('Step 5: Generating alerts', { requestId });
 
@@ -967,18 +1080,12 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       logger.error('Error generating alerts:', { 
         requestId, 
-        error: error.message,
-        stack: error.stack 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       });
       // Продолжаем без алертов, чтобы не ломать весь дашборд
       alerts = [];
     }
-    // const allUsers = WhatIfManager.mergeUsers(users, hypotheticalUsers);
-    // const allProjects = WhatIfManager.mergeProjects(projects, hypotheticalProjects);
-    // const allDepartments = WhatIfManager.mergeDepartmentsWithHypotheticalUsers(
-    //   departments, 
-    //   hypotheticalUsers
-    // );
 
     const responseTime = Date.now() - startTime;
     const startDate = new Date(periodStart)

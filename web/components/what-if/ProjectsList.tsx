@@ -17,6 +17,7 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
       case 'internal': return 'bg-purple-100 text-purple-800';
       case 'archive': return 'bg-gray-100 text-gray-800';
       case 'completed': return 'bg-teal-100 text-teal-800';
+      case 'presale_archive': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -27,6 +28,7 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
       case 'presale': return 'Presale';
       case 'internal': return 'Внутренний';
       case 'archive': return 'Архивный';
+      case 'presale_archive': return 'Presale архив';
       case 'completed': return 'Завершен';
       case 'on_hold': return 'На паузе';
       default: return status;
@@ -103,7 +105,7 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-muted-foreground mb-3">
                   <div>
                     <span className="font-medium">Тип:</span>
                     <span className="ml-2">{getTypeLabel(project.type)}</span>
@@ -116,7 +118,34 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
                     <span className="font-medium">Окончание:</span>
                     <span className="ml-2">{formatDate(project.end_date)}</span>
                   </div>
+                  <div>
+                    <span className="font-medium">Участники:</span>
+                    <span className="ml-2">{project.project_members?.length || 0}</span>
+                  </div>
                 </div>
+
+                {(project.bitrix24_id || project.weeek_id || project.lead_id) && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground mb-3">
+                    {project.bitrix24_id && (
+                      <div>
+                        <span className="font-medium">Bitrix24:</span>
+                        <span className="ml-2">{project.bitrix24_id}</span>
+                      </div>
+                    )}
+                    {project.weeek_id && (
+                      <div>
+                        <span className="font-medium">Weeek:</span>
+                        <span className="ml-2">{project.weeek_id}</span>
+                      </div>
+                    )}
+                    {project.lead_id && (
+                      <div>
+                        <span className="font-medium">Lead ID:</span>
+                        <span className="ml-2">{project.lead_id}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {project.comment && (
                   <div className="text-sm text-muted-foreground mb-2">
@@ -125,11 +154,9 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
                   </div>
                 )}
 
-                {project.bitrix24_id && (
-                  <div className="text-xs text-muted-foreground">
-                    Bitrix24 ID: {project.bitrix24_id}
-                  </div>
-                )}
+                <div className="text-xs text-muted-foreground">
+                  Планов: {project.plans?.length || 0} • Создан: {new Date(project.created_at).toLocaleDateString('ru-RU')}
+                </div>
               </div>
 
               <div className="flex space-x-2 ml-4">
@@ -146,10 +173,6 @@ export function ProjectsList({ projects, onEdit, onDelete, onCreate }: ProjectsL
                   Удалить
                 </button>
               </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
-              Создан: {new Date(project.created_at).toLocaleDateString('ru-RU')}
             </div>
           </Card>
         ))}

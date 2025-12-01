@@ -44,14 +44,18 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   }, []);
 
   const loadData = async () => {
-    const [usersData, projectsData, scenariosData] = await Promise.all([
-      fetchUsers(),
-      fetchProjects(),
-      fetchScenarios()
-    ]);
-    setUsers(usersData);
-    setProjects(projectsData);
-    setScenarios(scenariosData);
+    try {
+      const [usersData, projectsData, scenariosData] = await Promise.all([
+        fetchUsers(),
+        fetchProjects(),
+        fetchScenarios()
+      ]);
+      setUsers(usersData);
+      setProjects(projectsData);
+      setScenarios(scenariosData);
+    } catch (err) {
+      console.error('Error loading what-if data:', err);
+    }
   };
 
   const handleCreateUser = async (userData: any) => {
@@ -118,6 +122,12 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
     return (
       <Card className="p-4 border-destructive">
         <div className="text-destructive text-center">Ошибка: {error}</div>
+        <button 
+          onClick={loadData}
+          className="mt-2 px-3 py-1 bg-primary text-primary-foreground rounded text-sm"
+        >
+          Попробовать снова
+        </button>
       </Card>
     );
   }
@@ -155,18 +165,22 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
         </div>
 
         {showUserForm && (
-          <UserForm
-            departments={departments}
-            onSubmit={handleCreateUser}
-            onCancel={() => setShowUserForm(false)}
-          />
+          <div className="mt-4">
+            <UserForm
+              departments={departments}
+              onSubmit={handleCreateUser}
+              onCancel={() => setShowUserForm(false)}
+            />
+          </div>
         )}
 
         {showProjectForm && (
-          <ProjectForm
-            onSubmit={handleCreateProject}
-            onCancel={() => setShowProjectForm(false)}
-          />
+          <div className="mt-4">
+            <ProjectForm
+              onSubmit={handleCreateProject}
+              onCancel={() => setShowProjectForm(false)}
+            />
+          </div>
         )}
       </Card>
     );
@@ -181,7 +195,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
           Данные сохраняются в вашей персональной сессии и влияют на расчеты дашборда.
         </p>
 
-        {/* Табы */}
+        {/* Tabs */}
         <div className="flex space-x-4 mb-6 border-b">
           <button
             className={`pb-2 px-1 font-medium ${
@@ -215,7 +229,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
           </button>
         </div>
 
-        {/* Контент табов */}
+        {/* Tab content */}
         {activeTab === 'users' && (
           <UsersList
             users={users}
@@ -243,7 +257,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
         )}
       </Card>
 
-      {/* Формы */}
+      {/* Forms */}
       {showUserForm && (
         <UserForm
           departments={departments}

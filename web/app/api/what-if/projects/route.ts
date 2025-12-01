@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatIfManager } from '@/lib/whatIfUtils';
-import { getUserIdFromRequest } from '@/lib/authUtils';
+
+// Helper to get user ID from request (same as above)
+async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
+  const userId = request.headers.get('x-user-id');
+  if (userId) return userId;
+
+  const { searchParams } = new URL(request.url);
+  const queryUserId = searchParams.get('userId');
+  if (queryUserId) return queryUserId;
+
+  try {
+    if (request.method === 'POST' || request.method === 'PUT') {
+      const body = await request.clone().json();
+      return body.userId || body.user_id || null;
+    }
+  } catch (error) {
+    // Ignore body parsing errors
+  }
+
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
@@ -28,13 +48,13 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const body = await request.json();
     const whatIfData = await WhatIfManager.getUserWhatIfData(userId);
     
-    // Создаем активный сценарий если нет
+    // Create active scenario if none exists
     let activeScenario = whatIfData.scenarios.find(s => s.is_active);
     if (!activeScenario) {
       activeScenario = {
@@ -51,7 +71,7 @@ export async function POST(request: NextRequest) {
       whatIfData.active_scenario_id = activeScenario.id;
     }
 
-    // Создаем новый гипотетический проект
+    // Create new hypothetical project
     const newProject = WhatIfManager.createHypotheticalProject(body);
     activeScenario.projects.push(newProject);
     activeScenario.updated_at = new Date().toISOString();
@@ -72,7 +92,7 @@ export async function PUT(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -90,7 +110,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Обновляем проект
+    // Update project
     activeScenario.projects[projectIndex] = {
       ...activeScenario.projects[projectIndex],
       ...updates,
@@ -114,7 +134,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'User ID required' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);

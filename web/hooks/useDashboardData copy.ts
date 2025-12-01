@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Filters, User, Project, Department, TimeEntry, Plan, DashboardMetrics, ExtendedFilters } from '@/lib/dataModel';
 
+
 interface DashboardData {
   users: User[];
   projects: Project[];
@@ -30,25 +31,17 @@ interface UseDashboardDataReturn {
   refetch: () => void;
 }
 
-// Get user data from localStorage (enhanced to get both userData and userId)
+// Get user data from localStorage (same as in useFilters)
 const getUserData = () => {
   if (typeof window !== 'undefined') {
     const userDataStr = localStorage.getItem('userData');
-    const userId = localStorage.getItem('userId');
-    
     if (userDataStr) {
       try {
-        const userData = JSON.parse(userDataStr);
-        return {
-          ...userData,
-          userId: userId || userData.id?.toString()
-        };
+        return JSON.parse(userDataStr);
       } catch (error) {
         console.error('Failed to parse user data:', error);
         return null;
       }
-    } else if (userId) {
-      return { userId };
     }
   }
   return null;
@@ -89,9 +82,8 @@ export function useDashboardData(filters: ExtendedFilters): UseDashboardDataRetu
 
       console.log('🔄 Fetching dashboard data with filters:', filters);
 
-      // Get user data including ID for What-If
+      // Get user restrictions from localStorage
       const userData = getUserData();
-    
       const userRestrictions = userData ? {
         full_access: userData.full_access,
         lead_departments: userData.lead_departments || [],
@@ -105,8 +97,7 @@ export function useDashboardData(filters: ExtendedFilters): UseDashboardDataRetu
         },
         body: JSON.stringify({ 
           filters,
-          userRestrictions,
-          userId: userData?.userId // Add user ID for What-If data
+          userRestrictions // Include user restrictions in the request
         }),
         signal: controller.signal
       });
