@@ -266,7 +266,8 @@ export default function FilterBar({
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#EC694C] focus:border-transparent bg-white min-w-32"
             >
               <option value="week">Неделя</option>
-              <option value="month">Месяц</option>
+              <option value="last_30_days">Последние 30 дней</option>
+              <option value="month">Текущий месяц</option>
               <option value="quarter">Квартал</option>
               <option value="halfyear">6 месяцев</option>
               <option value="year">Год</option>

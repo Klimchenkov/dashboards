@@ -37,7 +37,7 @@ const getUserData = (): UserData | null => {
 export function useFilters() {
   // Basic filters state
   const [filters, setFilters] = useState<ExtendedFilters>({
-    period: 'month',
+    period: 'last_30_days',
     horizonMonths: 1,
     selectedDepartments: [],
     excludedDepartments: [],

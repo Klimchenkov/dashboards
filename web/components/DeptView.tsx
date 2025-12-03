@@ -10,7 +10,7 @@ interface DeptViewProps {
 
 export default function DeptView({ 
   deptAgg = [], 
-  period = null,
+  period,
 }: DeptViewProps) {
   return (
     <div className="space-y-4">

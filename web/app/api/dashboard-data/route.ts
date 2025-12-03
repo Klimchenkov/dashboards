@@ -123,11 +123,38 @@ async function invalidateCache(patterns: string[]): Promise<void> {
 
   try {
     for (const pattern of patterns) {
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-        logger.info('Invalidated cache keys', { pattern, keysCount: keys.length });
+      // Use SCAN for better performance on large datasets
+      let cursor = '0';
+      const keysToDelete: string[] = [];
+      
+      do {
+        const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = result[0];
+        const keys = result[1];
+        
+        if (keys.length > 0) {
+          keysToDelete.push(...keys);
+        }
+      } while (cursor !== '0');
+      
+      if (keysToDelete.length > 0) {
+        // Delete in batches to avoid blocking Redis
+        const batchSize = 100;
+        for (let i = 0; i < keysToDelete.length; i += batchSize) {
+          const batch = keysToDelete.slice(i, i + batchSize);
+          await redis.del(...batch);
+          logger.info(`Deleted batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(keysToDelete.length/batchSize)}`, {
+            pattern,
+            batchSize: batch.length,
+            totalKeys: keysToDelete.length
+          });
+        }
       }
+      
+      logger.info('Invalidated cache keys', { 
+        pattern, 
+        keysCount: keysToDelete.length 
+      });
     }
   } catch (error) {
     logger.error('Failed to invalidate cache:', error);
@@ -1047,20 +1074,122 @@ export async function POST(request: NextRequest) {
 // Keep existing cache management endpoints
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const pattern = searchParams.get('pattern') || '*';
+    const body = await request.json().catch(() => ({}));
+    const filters = body.filters;
+    const userRestrictions = body.userRestrictions;
     
-    await invalidateCache([pattern]);
+    logger.info('Cache invalidation request received', { 
+      filters: filters ? 'present' : 'absent',
+      userRestrictions: userRestrictions ? 'present' : 'absent'
+    });
+    
+    if (!filters) {
+      // If no filters provided, clear all dashboard-related cache
+      logger.info('No filters provided, clearing all dashboard cache');
+      await invalidateCache([
+        'users_*',
+        'projects_*', 
+        'departments_*',
+        'time_entries_*',
+        'plans_*',
+        'production_calendar_*',
+        'dashboard_metrics_*',
+        'alerts:*'
+      ]);
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'All dashboard cache cleared',
+        redisEnabled: !!redis,
+      });
+    }
+    
+    // Generate specific cache keys based on filters
+    const periodStart = fmt(startOfPeriod(filters.period));
+    const periodEnd = fmt(endOfPeriod(filters.period));
+    
+    // Generate all the cache keys that would have been created
+    const cacheKeys = [
+      // Users cache key
+      generateCacheKey('users', filters),
+      
+      // Projects cache key
+      generateCacheKey('projects', filters),
+      
+      // Departments cache key
+      generateCacheKey('departments', filters),
+      
+      // Time entries cache key (includes period)
+      generateCacheKey('time_entries', filters, `${periodStart}_${periodEnd}`),
+      
+      // Plans cache key
+      generateCacheKey('plans', filters),
+      
+      // Production calendar cache key (includes period)
+      generateCacheKey('production_calendar', filters, `${periodStart}_${periodEnd}`),
+      
+      // Dashboard metrics cache key (includes period)
+      generateCacheKey('dashboard_metrics', filters, `${periodStart}_${periodEnd}`),
+      
+      // Alerts cache key (special format)
+      `alerts:${generateCacheKey('', filters, `${periodStart}_${periodEnd}`)}`
+    ];
+    
+    logger.info('Generated cache keys for invalidation', { 
+      keys: cacheKeys,
+      periodStart,
+      periodEnd
+    });
+    
+    // Also generate wildcard patterns for partial matches
+    const patterns = [
+      // For any cache keys that might have additional variations
+      `${generateCacheKey('users', filters)}*`,
+      `${generateCacheKey('projects', filters)}*`,
+      `${generateCacheKey('departments', filters)}*`,
+      `${generateCacheKey('time_entries', filters)}*`,
+      `${generateCacheKey('plans', filters)}*`,
+      `${generateCacheKey('production_calendar', filters)}*`,
+      `${generateCacheKey('dashboard_metrics', filters)}*`,
+      `alerts:${generateCacheKey('', filters)}*`
+    ];
+    
+    // Combine exact keys and patterns
+    const allKeysToInvalidate = [...cacheKeys, ...patterns];
+    
+    await invalidateCache(allKeysToInvalidate);
+    
+    // Also invalidate any related user-specific cache
+    if (userRestrictions) {
+      const userId = userRestrictions.userId;
+      if (userId) {
+        await invalidateCache([`user_${userId}_*`]);
+      }
+    }
+    
+    logger.info('Cache invalidation completed', { 
+      keysCount: allKeysToInvalidate.length,
+      exactKeys: cacheKeys.length,
+      patterns: patterns.length
+    });
     
     return NextResponse.json({ 
       success: true, 
-      message: `Cache invalidated for pattern: ${pattern}`,
+      message: `Cache invalidated for ${allKeysToInvalidate.length} keys/patterns`,
       redisEnabled: !!redis,
+      invalidatedKeys: {
+        exact: cacheKeys,
+        patterns: patterns
+      }
     });
+    
   } catch (error) {
     logger.error('Error invalidating cache:', error);
     return NextResponse.json(
-      { error: 'Failed to invalidate cache' },
+      { 
+        error: 'Failed to invalidate cache',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

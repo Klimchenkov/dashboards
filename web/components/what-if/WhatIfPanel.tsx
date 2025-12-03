@@ -10,12 +10,18 @@ import { UsersList } from './UsersList';
 import { ProjectsList } from './ProjectsList';
 import { ScenarioManager } from './ScenarioManager';
 
+
 interface WhatIfPanelEnhancedProps {
   departments: Department[];
   compact?: boolean;
+  currentFilters?: any; // Add current filters for cache invalidation
 }
 
-export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhancedProps) {
+export function WhatIfPanel({ 
+  departments, 
+  compact = false,
+  currentFilters 
+}: WhatIfPanelEnhancedProps) {
   const [users, setUsers] = useState<HypotheticalUser[]>([]);
   const [projects, setProjects] = useState<HypotheticalProject[]>([]);
   const [scenarios, setScenarios] = useState<WhatIfScenario[]>([]);
@@ -39,9 +45,90 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
     deleteProject
   } = useWhatIfData();
 
+  const getUserId = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('userId') || 'demo-user-123';
+    }
+    return 'demo-user-123';
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Helper function to invalidate cache
+  const invalidateDashboardCache = async (userId?: string) => {
+    try {
+      const currentUserId = userId || getUserId();
+      
+      if (!currentUserId) {
+        console.warn('No user ID found for cache invalidation');
+        return false;
+      }
+
+      console.log('Invalidating cache for user:', currentUserId);
+
+      // First, try user-specific cache invalidation
+      try {
+        const userResponse = await fetch(`/api/dashboard-data?mode=user&userId=${currentUserId}`, {
+          method: 'DELETE'
+        });
+        
+        if (userResponse.ok) {
+          console.log('User-specific cache invalidated successfully');
+          return true;
+        } else {
+          console.warn('User-specific cache invalidation failed, trying specific mode');
+        }
+      } catch (userCacheError) {
+        console.warn('User cache invalidation error:', userCacheError);
+      }
+
+      // Fallback to specific invalidation with current filters
+      if (currentFilters) {
+        try {
+          const specificResponse = await fetch('/api/dashboard-data', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filters: currentFilters,
+              userRestrictions: { userId: currentUserId }
+            })
+          });
+          
+          if (specificResponse.ok) {
+            console.log('Specific cache invalidation successful');
+            return true;
+          } else {
+            console.warn('Specific cache invalidation failed');
+            const errorData = await specificResponse.json().catch(() => ({}));
+            console.warn('Error details:', errorData);
+          }
+        } catch (specificError) {
+          console.error('Specific cache invalidation error:', specificError);
+        }
+      }
+
+      // If both fail, try general cache clear as last resort
+      try {
+        const generalResponse = await fetch('/api/dashboard-data?mode=all', {
+          method: 'DELETE'
+        });
+        
+        if (generalResponse.ok) {
+          console.log('General cache invalidation successful');
+          return true;
+        }
+      } catch (generalError) {
+        console.error('General cache invalidation error:', generalError);
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error invalidating cache:', error);
+      return false;
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -58,9 +145,11 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
     }
   };
 
+  // Enhanced CRUD operations with cache invalidation
   const handleCreateUser = async (userData: any) => {
     const success = await createUser(userData);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
       setShowUserForm(false);
     }
@@ -70,6 +159,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   const handleUpdateUser = async (id: string, userData: any) => {
     const success = await updateUser(id, userData);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
       setEditingUser(null);
     }
@@ -79,6 +169,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   const handleDeleteUser = async (id: string) => {
     const success = await deleteUser(id);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
     }
     return success;
@@ -87,6 +178,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   const handleCreateProject = async (projectData: any) => {
     const success = await createProject(projectData);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
       setShowProjectForm(false);
     }
@@ -96,6 +188,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   const handleUpdateProject = async (id: string, projectData: any) => {
     const success = await updateProject(id, projectData);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
       setEditingProject(null);
     }
@@ -105,9 +198,25 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   const handleDeleteProject = async (id: string) => {
     const success = await deleteProject(id);
     if (success) {
+      await invalidateDashboardCache();
       await loadData();
     }
     return success;
+  };
+
+  // Manual cache clearing for user
+  const handleClearCache = async () => {
+    try {
+      const success = await invalidateDashboardCache();
+      if (success) {
+        alert('Кэш дашборда успешно очищен! Обновите страницу, чтобы увидеть изменения.');
+      } else {
+        alert('Не удалось очистить кэш. Возможно, потребуется обновить страницу вручную.');
+      }
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      alert('Ошибка при очистке кэша');
+    }
   };
 
   if (loading && users.length === 0 && projects.length === 0) {
@@ -141,14 +250,23 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
             <button
               onClick={() => setShowUserForm(true)}
               className="px-3 py-1 bg-primary text-primary-foreground rounded text-sm"
+              title="Добавить гипотетического сотрудника"
             >
               + Сотрудник
             </button>
             <button
               onClick={() => setShowProjectForm(true)}
               className="px-3 py-1 bg-primary text-primary-foreground rounded text-sm"
+              title="Добавить гипотетический проект"
             >
               + Проект
+            </button>
+            <button
+              onClick={handleClearCache}
+              className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm"
+              title="Очистить кэш дашборда после изменений"
+            >
+              🗑️
             </button>
           </div>
         </div>
@@ -189,11 +307,31 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h2 className="text-2xl font-bold mb-4">What-If Моделирование</h2>
-        <p className="text-muted-foreground mb-6">
-          Создавайте гипотетических сотрудников и проекты для моделирования будущих сценариев.
-          Данные сохраняются в вашей персональной сессии и влияют на расчеты дашборда.
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold">What-If Моделирование</h2>
+            <p className="text-muted-foreground mt-2">
+              Создавайте гипотетических сотрудников и проекты для моделирования будущих сценариев.
+              Данные сохраняются в вашей персональной сессии и влияют на расчеты дашборда.
+            </p>
+          </div>
+          <button
+            onClick={handleClearCache}
+            className="px-4 py-2 bg-destructive text-destructive-foreground rounded text-sm hover:bg-destructive/90"
+            title="Очистить кэш дашборда после внесения изменений"
+          >
+            Очистить кэш
+          </button>
+        </div>
+
+        {/* Cache information panel */}
+        <div className="mb-6 p-3 bg-muted rounded text-sm">
+          <p className="font-medium">Информация о кэшировании:</p>
+          <p className="text-muted-foreground">
+            После создания, изменения или удаления данных кэш дашборда будет автоматически очищен.
+            Это может занять несколько секунд. Обновите дашборд, чтобы увидеть изменения.
+          </p>
+        </div>
 
         {/* Tabs */}
         <div className="flex space-x-4 mb-6 border-b">
@@ -253,6 +391,7 @@ export function WhatIfPanel({ departments, compact = false }: WhatIfPanelEnhance
           <ScenarioManager
             scenarios={scenarios}
             onScenariosChange={loadData}
+            onCacheClear={handleClearCache}
           />
         )}
       </Card>

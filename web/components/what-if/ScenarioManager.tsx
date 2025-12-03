@@ -15,6 +15,38 @@ export function ScenarioManager({ scenarios, onScenariosChange }: ScenarioManage
 
   const activeScenario = scenarios.find(s => s.is_active);
 
+  const getCurrentUser = () => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const userData = localStorage.getItem('userData');
+      const userId = localStorage.getItem('userId');
+
+      
+      if (userId) {
+        return { id: userId };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      return null;
+    }
+  };
+
+  const getAuthHeaders = () => {
+    const user = getCurrentUser();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (user?.id) {
+      headers['x-user-id'] = user.id.toString();
+    }
+    
+    return headers;
+  };
+
   const createScenario = async () => {
     if (!newScenarioName.trim()) return;
 
@@ -62,7 +94,8 @@ export function ScenarioManager({ scenarios, onScenariosChange }: ScenarioManage
 
     try {
       const response = await fetch(`/api/what-if/scenarios?id=${scenarioId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
 
       if (response.ok) {

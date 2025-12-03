@@ -178,7 +178,7 @@ export default function SettersResourceDashboardMock() {
     {tab==='person' && <PersonView deptAgg={deptAgg} projects={data?.projects} horizonMonth={filters.horizonMonth}/>}
     {tab==='project' && <ProjectDetailView projects={data?.projects} users={data?.users} timeEntries={data?.timeEntries}/>}
     {tab==='alerts' && <AlertCenter alerts_cache_key={alerts_cache_key} />}
-    {tab==='whatif' && <WhatIfPanel departments={data?.departments || []} />}
+    {tab==='whatif' && <WhatIfPanel departments={data?.departments || []} currentFilters={filters}/>}
 
     <div className="mt-6 grid md:grid-cols-3 gap-4">
       <AlertCenter compact maxAlerts={5} alerts_cache_key={alerts_cache_key}  />
