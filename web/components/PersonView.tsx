@@ -384,7 +384,7 @@ function calculateUserForecast(
 
   // Собираем все планы пользователя
   const futurePlannedHours = userPlans.reduce((total, plan) => {
-    const plannedHours = (plan.contracted_hours || 0) + (plan.internal_hours || 0);
+    const plannedHours = (plan.internal_hours || 0);
     
     // Учитываем только часы, которые еще не отработаны
     const actualHours = userTimeEntries
@@ -583,7 +583,7 @@ export default function PersonView({
         ...plan,
         projectName,
         actualHours,
-        totalPlannedHours: (plan.contracted_hours || 0) + (plan.internal_hours || 0)
+        totalPlannedHours: (plan.internal_hours || 0)
       };
     });
   }, [filteredPlans, projects, filteredTimeEntries]);
@@ -1205,7 +1205,6 @@ export default function PersonView({
                       <th className="p-2 text-left">Название проекта</th>
                       <th className="p-2 text-left">Контрактные часы</th>
                       <th className="p-2 text-left">Внутренние часы</th>
-                      <th className="p-2 text-left">Всего план</th>
                       <th className="p-2 text-left">Факт часов</th>
                       <th className="p-2 text-left">Разница</th>
                       <th className="p-2 text-left">Период</th>
@@ -1214,7 +1213,7 @@ export default function PersonView({
                   </thead>
                   <tbody>
                     {projectsWithDetails.map((project, index) => {
-                      const difference = project.actualHours - project.totalPlannedHours;
+                      const difference =  project.totalPlannedHours - project.actualHours;
                       const differenceClass = difference > 0 ? 'text-green-600' : difference < 0 ? 'text-red-600' : 'text-gray-600';
                       
                       return (
@@ -1224,7 +1223,6 @@ export default function PersonView({
                           </td>
                           <td className="p-2">{project.contracted_hours || 0} ч</td>
                           <td className="p-2">{project.internal_hours || 0} ч</td>
-                          <td className="p-2 font-medium">{project.totalPlannedHours} ч</td>
                           <td className="p-2 font-medium">{project.actualHours.toFixed(1)} ч</td>
                           <td className={`p-2 font-medium ${differenceClass}`}>
                             {difference > 0 ? '+' : ''}{difference.toFixed(1)} ч

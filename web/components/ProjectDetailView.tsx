@@ -91,7 +91,7 @@ export default function ProjectDetailView({ projects, users, timeEntries = [] }:
 
     // Суммируем плановые часы из всех планов проекта
     const totalPlannedHours = selectedProject.plans?.reduce((sum, plan) => 
-      sum + (plan.contracted_hours || 0) + (plan.internal_hours || 0), 0
+      sum + (plan.internal_hours || 0), 0
     ) || 0;
 
     // Суммируем фактические часы по проекту
@@ -183,7 +183,7 @@ export default function ProjectDetailView({ projects, users, timeEntries = [] }:
       // Находим планы для этого пользователя в проекте
       const userPlans = selectedProject.plans?.filter(plan => plan.user_id === user.id) || [];
       const plannedHours = userPlans.reduce((sum, plan) => 
-        sum + (plan.contracted_hours || 0) + (plan.internal_hours || 0), 0
+        sum + (plan.internal_hours || 0), 0
       );
 
       // Считаем фактические часы пользователя по проекту
