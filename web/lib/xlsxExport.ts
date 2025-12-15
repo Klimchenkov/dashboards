@@ -1,0 +1,6 @@
+// /web/lib/xlsxExport.ts
+import * as XLSX from 'xlsx';
+export function exportToXLSX(filename:string, sheets:Record<string, any[]>){ const wb=XLSX.utils.book_new(); for(const [n,rows] of Object.entries(sheets)){ const ws=XLSX.utils.json_to_sheet(rows); XLSX.utils.book_append_sheet(wb, ws, n.slice(0,31)); } XLSX.writeFile(wb, filename); }
+export function exportToCSV(filename:string, rows:any[]){ const header=Object.keys(rows[0]??{}); const lines=[header.join(","), ...rows.map(r=> header.map(h=>JSON.stringify(r[h]??"")).join(","))]; const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+export function exportHiringReport(departmentId:number|string, forecastMonths=3, rows:any[]=[]){ const fn=`hiring_justification_${departmentId}_${new Date().toISOString().split('T')[0]}.xlsx`; const sheets={ "Прогноз нагрузки":rows, "Дефицит мощностей":rows.slice(0,50), "Экономическое обоснование":rows.slice(50,100) }; exportToXLSX(fn, sheets); }
+export function exportProjectAnalysis(projectName:string, rows:any[]=[]){ const fn=`project_analysis_${projectName}_${new Date().toISOString().split('T')[0]}.xlsx`; exportToXLSX(fn, { Summary: rows }); }
