@@ -49,8 +49,7 @@ export function capacityHours(
     const userWorksThisWeekday = user.norm.working_days.includes(adjustedDayOfWeek);
     
     // CRITICAL FIX: Properly handle non-working days
-    const isNonWorkingDay = !(calendarDay.is_holiday && user.norm.works_on_holidays);
-    
+    const isNonWorkingDay = calendarDay.is_holiday && !user.norm.works_on_holidays;
     // Check if user is on vacation
     const isOnVacation = user.vacations?.some(v => {
       const vacationStart = new Date(v.start_date);
