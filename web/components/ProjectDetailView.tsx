@@ -456,7 +456,7 @@ export default function ProjectDetailView({ projects, users, timeEntries = [] }:
             <thead className="bg-gray-50">
               <tr>
                 <th className="p-2 text-left">Участник</th>
-                <th className="p-2 text-left">Отдел</th>
+                <th className="p-2 text-left"></th>
                 <th className="p-2 text-left">Плановые часы</th>
                 <th className="p-2 text-left">Фактические часы</th>
                 <th className="p-2 text-left">Выполнение</th>
@@ -502,25 +502,37 @@ export default function ProjectDetailView({ projects, users, timeEntries = [] }:
                     <td className="p-2">{member.actualHours.toFixed(1)} ч</td>
                     <td className="p-2">
                       <div className="flex items-center gap-2">
-                        <span>{member.completionPercentage.toFixed(0)}%</span>
-                        <div className="w-16 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              member.completionPercentage >= 100 ? 'bg-green-500' :
-                              member.completionPercentage >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${Math.min(member.completionPercentage, 100)}%` }}
-                          />
-                        </div>
+                        {member.plannedHours > 0 ? (
+                          <>
+                            <span>{`${member.completionPercentage.toFixed(0)}%`}</span>
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  member.completionPercentage >= 100 ? 'bg-green-500' :
+                                  member.completionPercentage >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${Math.min(member.completionPercentage, 100)}%` }}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <span>—</span>
+                        )}
                       </div>
                     </td>
                     <td className="p-2">
-                      {member.overload ? (
-                        <span className="text-red-600 font-medium">Перегруз</span>
-                      ) : member.plannedHours === 0 ? (
+                      {member.plannedHours === 0 ? (
                         <span className="text-yellow-600">Нет плана</span>
                       ) : (
-                        <span className="text-green-600">OK</span>
+                        <>
+                          {member.completionPercentage >= 0 && member.completionPercentage < 70 ? (
+                            <span className="text-red-600">Риск</span>
+                          ) : member.completionPercentage >= 70 && member.completionPercentage <= 130 ? (
+                            <span className="text-green-500">OK</span>
+                          ) : (
+                            <span className="text-green-700 dark:text-green-600">Перевыполнение</span>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>

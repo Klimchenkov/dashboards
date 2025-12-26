@@ -254,14 +254,15 @@ export function DepartmentUsersTable({
               <thead className="bg-gray-50">
                 <tr className="text-left border-b border-gray-200">
                   <th className="p-3 font-semibold text-gray-700">Сотрудник</th>
-                  <th className="p-3 font-semibold text-gray-700 text-right">План</th>
-                  <th className="p-3 font-semibold text-gray-700 text-right">Факт</th>
-                  <th className="p-3 font-semibold text-gray-700 text-right">Прогноз</th>
+                  <th className="p-3 font-semibold text-gray-700 text-right">Capacity</th>
+                  <th className="p-3 font-semibold text-gray-700 text-right">Demand</th>
                   <th className="p-3 font-semibold text-gray-700 text-center">Загрузка</th>
                   <th className="p-3 font-semibold text-gray-700 text-center">Статус</th>
                   <th className="p-3 font-semibold text-gray-700 text-center">Коммерческие</th>
                   <th className="p-3 font-semibold text-gray-700 text-center">Presale</th>
+                  <th className="p-3 font-semibold text-gray-700 text-center">Архивные</th>
                   <th className="p-3 font-semibold text-gray-700 text-center">Внутренние</th>
+                  <th className="p-3 font-semibold text-gray-700 text-right bg-gray-100 border-l-2 border-dashed border-gray-400">Forecast</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,11 +283,6 @@ export function DepartmentUsersTable({
                       </td>
                       <td className="p-3 text-right text-gray-700">
                         {user.demand.toFixed(0)} ч
-                      </td>
-                      <td className="p-3 text-right text-gray-700">
-                        <span className={user.forecast > user.demand ? "text-green-600 font-medium" : "text-gray-700"}>
-                          {user.forecast.toFixed(0)} ч
-                        </span>
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -333,12 +329,25 @@ export function DepartmentUsersTable({
                         )}
                       </td>
                       <td className="p-3 text-center text-gray-700">
+                        {user.otherHours.toFixed(0)} ч
+                        {totalUserHours > 0 && (
+                          <div className="text-xs text-gray-500">
+                            ({((user.otherHours / totalUserHours) * 100).toFixed(0)}%)
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3 text-center text-gray-700">
                         {user.internalHours.toFixed(0)} ч
                         {totalUserHours > 0 && (
                           <div className="text-xs text-gray-500">
                             ({((user.internalHours / totalUserHours) * 100).toFixed(0)}%)
                           </div>
                         )}
+                      </td>
+                      <td className="p-3 text-right bg-gray-100 group-hover:bg-gray-200 border-l-2 border-dashed border-gray-400">
+                        <span className="text-gray-700">
+                          {user.forecast.toFixed(0)} ч
+                        </span>
                       </td>
                     </tr>
                   );

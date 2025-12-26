@@ -81,7 +81,7 @@ export function demandHours(user: User, start: string, end: string, timeEntries:
 
   return timeEntries
     .filter(t => t.user_id === user.id && new Date(t.date) >= s && new Date(t.date) <= e)
-    .filter(t => t.project_status === 'active' || t.project_status === 'presale' || t.project_status === 'presale_archive' || t.project_status === 'archive')
+    .filter(t => t.project_status === 'active' || t.project_status === 'presale' || t.project_status === 'presale_archive' || t.project_status === 'internal' || t.project_status === 'archive')
     .reduce((a, b) => a + b.hours, 0);
 }
 export function forecastHours(
